@@ -22,6 +22,7 @@
 //   - Existing watch binding is replaced only after a successful pairing connection/time write.
 //   - Static web UI remains gzip-compressed in flash and streamed from PROGMEM.
 //   - NimBLE-Arduino 2.5.1+ is required for reliable shutdown/re-init on Arduino-ESP32 3.3.11.
+// BX1 correction: SP record framing, complete single-ATT writes, and stage/error diagnostics.
 
 // Using software radio on ESP32/ESP32-C3.
 //
@@ -72,6 +73,7 @@
 // BLE central stack. NimBLE-Arduino 2.5.1+ substantially reduces
 // flash/RAM use while retaining the Casio client protocols.
 #include <NimBLEDevice.h>
+#include <NimBLEUtils.h>
 #ifdef USING_NIMBLE_ARDUINO_HEADERS
 #include "nimble/porting/nimble/include/nimble/nimble_port.h"
 #else
@@ -79,6 +81,7 @@
 #endif
 
 #include "RadioBleArbiter.h"
+#include "CasioBxProtocol.h"
 #include "esp_bt.h"
 #include <string>
 #include <strings.h>
@@ -97,6 +100,7 @@ bool webServerStarted=false;
 // Configuration Constants
 #define DEVICENAME_PREFIX "RadioStation"     // Device name prefix for WiFi AP mode
 #define FIRMWARE_VERSION "V3.2.2"
+#define FIRMWARE_BUILD "BX1"
 
 #define DEFAULT_TZ_NAME "Asia/Tokyo"
 #define CONFIG_FILE "/config.json"           // WiFi and timezone configuration file
@@ -704,7 +708,7 @@ void setup(void)
 {
   Serial.begin(115200);
   delay(100);
-  Serial.printf("started... (firmware %s)\n", FIRMWARE_VERSION);
+  Serial.printf("started... (firmware %s build %s)\n", FIRMWARE_VERSION, FIRMWARE_BUILD);
   bootMillis = millis();
 
   // Flash-wear mitigation #1: by default, Arduino-ESP32's WiFi.begin()
@@ -2203,6 +2207,10 @@ public:
     Serial.printf("BT: Casio watch disconnected (reason=%d)\n", reason);
     publishDisconnected();
   }
+  void onMTUChange(NimBLEClient *client, uint16_t mtu) override {
+    (void)client;
+    Serial.printf("BT: negotiated ATT MTU=%u\n", mtu);
+  }
 private:
   static void publishDisconnected(void) {
     // Never delete the client, its services or characteristics in a callback.
@@ -2218,9 +2226,11 @@ static GShockClientCallbacks gshockClientCallbacks;
 
 static void gshockNotifyCallback(NimBLERemoteCharacteristic *characteristic,
                                  uint8_t *data, size_t length, bool isNotify) {
-  (void)characteristic;
   (void)isNotify;
-  if (!data || !length) return;
+  // TIME also notifies on this watch. Only SP_DATA belongs to this transfer;
+  // never append an unrelated characteristic's notification to a reply.
+  if (!characteristic || characteristic->getUUID() != NimBLEUUID(CASIO_SP_DATA_CHAR) ||
+      !data || !length) return;
   portENTER_CRITICAL(&btResponseMux);
   // First packet has the response header; continuation packets need not.
   // Buffer bounds are strict: never pass silently truncated watch data back.
@@ -2521,19 +2531,76 @@ static size_t copyBt(uint8_t *dst, size_t maxLen) {
 
 // Write mode is a protocol requirement, not a capability fallback: SP_REQUEST
 // is a command without an ATT response; SP_DATA and TIME require ATT responses.
+static const char *btGattStage = "idle";
+
+static int btWriteComplete(uint16_t connection, const ble_gatt_error *error,
+                           ble_gatt_attr *attribute, void *arg) {
+  (void)connection;
+  (void)attribute;
+  auto *task = static_cast<NimBLETaskData *>(arg);
+  *static_cast<uint16_t *>(task->m_pBuf) = error->att_handle;
+  NimBLEUtils::taskRelease(*task, error->status);
+  return 0;
+}
+
 static bool writeBt(NimBLERemoteCharacteristic *c, const uint8_t *d, size_t n,
                     bool withResponse) {
   if (!c || !d || !n || bleOperationCancelled() ||
       !btClientPreemptionEnabled.load(std::memory_order_acquire) ||
       !btClientConnected.load(std::memory_order_acquire)) return false;
   if (withResponse ? !c->canWrite() : !c->canWriteNoResponse()) return false;
-  bool delivered = c->writeValue(d, n, withResponse);
-  // A successful Write Without Response only confirms local command submission.
-  if (delivered && withResponse) ++btWriteAcknowledgements;
-  if (!delivered) Serial.printf("BT: GATT %s failed (UUID=%s)\n",
-                               withResponse ? "write-response" : "write-no-response",
-                               c->getUUID().toString().c_str());
-  return delivered;
+  const uint16_t mtu = btClient->getMTU();
+  Serial.printf("BT: %s %s header=0x%02x bytes=%u MTU=%u\n", btGattStage,
+                withResponse ? "write-response" : "write-no-response", d[0], (unsigned)n, mtu);
+  // These protocol packets are single ATT writes. NimBLE's writeValue() can
+  // fall back to a truncated prefix when a peer rejects Prepare/Execute Write.
+  // Never report delivery of a partial packet or silently change its write mode.
+  if (mtu < 3 || n > (size_t)(mtu - 3)) {
+    Serial.printf("BT: %s rejected: %u-byte packet requires MTU >= %u\n",
+                  btGattStage, (unsigned)n, (unsigned)(n + 3));
+    return false;
+  }
+  int status = BLE_HS_ENOTCONN;
+  uint16_t errorHandle = 0;
+  for (unsigned attempt = 0; attempt < 2; ++attempt) {
+    if (bleOperationCancelled() || !btClientPreemptionEnabled.load(std::memory_order_acquire) ||
+        !btClientConnected.load(std::memory_order_acquire)) return false;
+    if (!withResponse) {
+      status = ble_gattc_write_no_rsp_flat(btClient->getConnHandle(), c->getHandle(), d, n);
+    } else {
+      NimBLETaskData task(nullptr, 0, &errorHandle);
+      status = ble_gattc_write_flat(btClient->getConnHandle(), c->getHandle(), d, n,
+                                   btWriteComplete, &task);
+      if (status == 0) {
+        // Keep callback storage alive until ATT completes or GAP cancels it.
+        // The independent host monitor still preempts this wait for RF demand.
+        NimBLEUtils::taskWait(task, BLE_NPL_TIME_FOREVER);
+        status = task.m_flags;
+      }
+      if (status == BLE_HS_EDONE) status = 0;
+    }
+    if (status == 0) {
+      // WNR success confirms local submission only; WR success is an ATT ack.
+      if (withResponse) ++btWriteAcknowledgements;
+      return true;
+    }
+    const bool needsSecurity = status == BLE_HS_ATT_ERR(BLE_ATT_ERR_INSUFFICIENT_AUTHEN) ||
+                               status == BLE_HS_ATT_ERR(BLE_ATT_ERR_INSUFFICIENT_AUTHOR) ||
+                               status == BLE_HS_ATT_ERR(BLE_ATT_ERR_INSUFFICIENT_ENC);
+    if (attempt == 0 && withResponse && needsSecurity && !bleOperationCancelled() &&
+        btClientPreemptionEnabled.load(std::memory_order_acquire) &&
+        btClientConnected.load(std::memory_order_acquire) && btClient->secureConnection()) {
+      Serial.printf("BT: %s retrying full packet after securing connection\n", btGattStage);
+      continue;
+    }
+    break;
+  }
+  Serial.printf("BT: %s GATT %s failed (UUID=%s status=%d/0x%04x error-handle=0x%04x)\n",
+                btGattStage, withResponse ? "write-response" : "write-no-response",
+                c->getUUID().toString().c_str(), status, (unsigned)status, errorHandle);
+  if (status >= 0x100 && status < 0x200)
+    Serial.printf("BT: ATT error=0x%02x\n", status - 0x100);
+  return false;
 }
 
 static void disconnectGShock(void) {
@@ -2608,6 +2675,11 @@ static bool connectGShock(int protocol) {
     btBleBusy = false;
     return false;
   }
+  if (protocol == BT_PROTOCOL_BX5600_MIP && !NimBLEDevice::setMTU(517)) {
+    Serial.println("BT: preferred ATT MTU setup failed");
+    disconnectGShock();
+    return false;
+  }
   btClientTerminationRequested.store(false, std::memory_order_release);
   ++btConnectionAttempts;
   btClientQuiescentReady.store(false, std::memory_order_release);
@@ -2637,6 +2709,22 @@ static bool connectGShock(int protocol) {
     disconnectGShock();
     return false;
   }
+  if (protocol == BT_PROTOCOL_BX5600_MIP) {
+    // onConnect may precede asynchronous MTU completion. Largest SP packet is
+    // 133 bytes and must fit in a single Write Request (MTU >= 136).
+    const uint32_t mtuStarted = millis();
+    while (btClient->getMTU() < CasioBxProtocol::kMinimumMtu &&
+           !bleOperationCancelled() && btClientConnected.load(std::memory_order_acquire) &&
+           btClientPreemptionEnabled.load(std::memory_order_acquire) &&
+           millis() - mtuStarted < 2000UL) delay(5);
+    Serial.printf("BT: GW-BX5600 ATT MTU=%u (required >= %u)\n",
+                  btClient->getMTU(), (unsigned)CasioBxProtocol::kMinimumMtu);
+    if (btClient->getMTU() < CasioBxProtocol::kMinimumMtu) {
+      Serial.println("BT: MTU exchange insufficient; no SP handshake sent");
+      disconnectGShock();
+      return false;
+    }
+  }
   btService = btClient->getService(NimBLEUUID(CASIO_WATCH_FEATURES_SERVICE));
   if (bleOperationCancelled() || !btService) {
     Serial.println("BT: Casio feature service missing or discovery cancelled");
@@ -2656,13 +2744,9 @@ static bool connectGShock(int protocol) {
     // Subscribe before sending any request so a fast response cannot be lost.
     bool subscribed = false;
     if (valid && !bleOperationCancelled()) {
-      const auto &chars = btService->getCharacteristics();
-      for (auto *c : chars) {
-        if (bleOperationCancelled() || !btClientConnected.load(std::memory_order_acquire)) break;
-        if (c && c->canNotify() && c->subscribe(true, gshockNotifyCallback, true)) subscribed = true;
-        else if (c && c->canIndicate() && c->subscribe(false, gshockNotifyCallback, true)) subscribed = true;
-      }
-      if (!subscribed) Serial.println("BT: no Casio response notification/indication subscription succeeded");
+      if (btSpData->canNotify()) subscribed = btSpData->subscribe(true, gshockNotifyCallback, true);
+      else if (btSpData->canIndicate()) subscribed = btSpData->subscribe(false, gshockNotifyCallback, true);
+      if (!subscribed) Serial.println("BT: SP_DATA notification/indication subscription failed");
     }
     valid = valid && subscribed;
   }
@@ -2695,6 +2779,8 @@ static size_t bxRequest(const uint8_t *req, size_t reqLen, uint8_t header,
     return 0;
   }
   size_t len = copyBt(out, maxOut);
+  Serial.printf("BT: %s response header=0x%02x bytes=%u\n", btGattStage,
+                len ? out[0] : 0, (unsigned)len);
   if (len < minimum || out[0] != header) {
     ++btResponseErrors;
     return 0;
@@ -2705,21 +2791,36 @@ static size_t bxRequest(const uint8_t *req, size_t reqLen, uint8_t header,
 bool performGShockBX5600Sync(void) {
   if (!connectGShock(BT_PROTOCOL_BX5600_MIP)) return false;
   uint8_t r[BT_RESPONSE_CAPACITY];
+  uint8_t cities[CasioBxProtocol::kCitiesSize];
+  uint8_t settings[CasioBxProtocol::kSettingsWriteSize];
+  uint8_t dst[CasioBxProtocol::kDstWriteSize];
   bool ok = false;
 
   do {
+    btGattStage = "BX step 1 settings";
     const uint8_t req1[] = {0x05,0x1D,0x00,0x1D,0x00,0x24,0x00,0x24,0x01,0x24,0x02};
     size_t n1 = bxRequest(req1, sizeof(req1), 0x05, 101, r, sizeof(r));
     if (!n1) break;
-    r[0] = 0x02;
-    if (!writeBt(btSpData, r, n1, true)) break;
+    if (!CasioBxProtocol::splitSettings(r, n1, settings, sizeof(settings), cities, sizeof(cities))) {
+      Serial.println("BT: BX step 1 malformed settings/city records");
+      ++btResponseErrors;
+      break;
+    }
+    // Send only the two 0x1D records; save the three 0x24 city records for step 2.
+    if (!writeBt(btSpData, settings, sizeof(settings), true)) break;
 
+    btGattStage = "BX step 2 DST/cities";
     const uint8_t req2[] = {0x03,0x1E,0x00,0x1E,0x00,0x1E,0x00};
     size_t n2 = bxRequest(req2, sizeof(req2), 0x03, 28, r, sizeof(r));
     if (!n2) break;
-    r[0] = 0x06;
-    if (!writeBt(btSpData, r, n2, true)) break;
+    if (!CasioBxProtocol::buildDst(r, n2, cities, sizeof(cities), dst, sizeof(dst))) {
+      Serial.println("BT: BX step 2 malformed DST/city records");
+      ++btResponseErrors;
+      break;
+    }
+    if (!writeBt(btSpData, dst, sizeof(dst), true)) break;
 
+    btGattStage = "BX step 3 alarms";
     uint8_t req3[13] = {0x06};
     for (int i = 0; i < 6; ++i) {
       int idx = (i / 2) + ((i % 2) ? 6 : 0);
@@ -2728,6 +2829,11 @@ bool performGShockBX5600Sync(void) {
     }
     size_t n3 = bxRequest(req3, sizeof(req3), 0x06, 133, r, sizeof(r));
     if (!n3) break;
+    if (!CasioBxProtocol::validAlarms(r, n3)) {
+      Serial.println("BT: BX step 3 malformed alarm records");
+      ++btResponseErrors;
+      break;
+    }
     if (!writeBt(btSpData, r, n3, true)) break;
 
     struct timeval tv;
@@ -2743,6 +2849,7 @@ bool performGShockBX5600Sync(void) {
       (uint8_t)(local.tm_wday==0?7:local.tm_wday),
       (uint8_t)((tv.tv_usec/1000UL*256UL)/1000UL),0x01
     };
+    btGattStage = "BX step 4 TIME";
     if (!writeBt(btSetChar, tc, sizeof(tc), true)) break;
 
     ok = true;
@@ -2753,6 +2860,7 @@ bool performGShockBX5600Sync(void) {
   } while (false);
 
   disconnectGShock();
+  btGattStage = "idle";
   return ok;
 }
 
@@ -2771,12 +2879,14 @@ bool performCasioStandardTimeSync(int protocol) {
     (uint8_t)local.tm_hour, (uint8_t)local.tm_min, (uint8_t)local.tm_sec,
     (uint8_t)local.tm_wday, 0x01
   };
+  btGattStage = "Casio TIME";
   bool ok = writeBt(btSetChar, tc, sizeof(tc), true);
   if (ok) btDeliveryEvidence = "ATT write acknowledged; watch display unverified";
   if (ok) Serial.printf("BT: %s time write acknowledged, %04d-%02d-%02d %02d:%02d:%02d\n",
                         btProtocolName(protocol), year, local.tm_mon + 1, local.tm_mday,
                         local.tm_hour, local.tm_min, local.tm_sec);
   disconnectGShock();
+  btGattStage = "idle";
   return ok;
 }
 

@@ -45,7 +45,7 @@ For Arduino IDE, install those board/library versions and open:
 
 `firmware/RadioClock_V3_2_2_Casio_BLE_Reliability/RadioClock_V3_2_2_Casio_BLE_Reliability.ino`
 
-Keep `RadioBleArbiter.h` and `partitions.csv` beside the sketch. Select a compatible classic ESP32 board and 4 MB flash. The included large-app layout has one application slot; it does not support dual-slot OTA updates.
+Keep `RadioBleArbiter.h`, `CasioBxProtocol.h`, and `partitions.csv` beside the sketch. Select a compatible classic ESP32 board and 4 MB flash. The included large-app layout has one application slot; it does not support dual-slot OTA updates.
 
 In the Codex Linux cloud workspace:
 
@@ -69,6 +69,11 @@ For the GW-BX5600, module 3578:
 - Pair/connect: hold **C for at least 3 seconds** until the Bluetooth symbol and **CONNECT WITH A PHONE** flash.
 - Manual time correction: from **Timekeeping Mode, press D once**.
 
+The **BX1** build corrects the SP settings/city record framing and logs the exact
+handshake stage, negotiated MTU, and ATT error. It preserves the watch's existing
+settings and sends complete packets with their required write modes. See
+[the handshake evidence and device check](docs/GW-BX5600-SP-handshake.md).
+
 **Always wait for watch sync requests** listens only for the selected paired watch while RF is idle. It resumes after successful/failed sync and after RF ends. It never learns an unknown watch. Watches that rotate their BLE address may require explicit pairing again; the binding filter remains strict.
 
 **Disable Wi-Fi sleep / Keep Wi-Fi always on** uses the existing Wi-Fi power-mode enum: enabled is Always on (`0`); disabled is Scheduled/power-save (`1`). It also applies the corresponding Wi-Fi driver sleep setting. There is no independent persistent sleep flag.
@@ -89,7 +94,7 @@ See `docs/V3.2.2-review.md` for the current build evidence and hardware acceptan
 
 ## Build status
 
-V3.2.2 compiles with the pinned toolchain: **1,374,672 bytes of flash (43% of the 3 MB app partition)** and **61,656 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, and concurrent ownership host tests pass. Actual watch time delivery, disconnect behavior, and RF waveform timing still require physical hardware acceptance.
+V3.2.2 BX1 compiles with the pinned toolchain: **1,376,876 bytes of flash (43% of the 3 MB app partition)** and **61,656 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, packet framing, and concurrent ownership host tests pass. Actual watch time delivery, disconnect behavior, and RF waveform timing still require physical hardware acceptance.
 
 ## Credits and provenance
 
@@ -107,6 +112,7 @@ The project also uses these libraries and platforms:
 - [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) — the NimBLE-based Bluetooth stack maintained by h2zero and contributors, building on Apache Mynewt NimBLE.
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) — JSON parsing and serialization by Benoît Blanchon and contributors.
 - [Arduino CLI](https://github.com/arduino/arduino-cli) — reproducible cloud builds and dependency installation.
+- [izivkov/gshock_api](https://github.com/izivkov/gshock_api) — public GW-BX5600 official-app Bluetooth captures used to check the SP packet structure. The BX1 packet helper was implemented independently from those observations.
 
 The JJY implementation references [NICT's time-signal specification](https://jjy.nict.go.jp/jjy/trans/index-e.html). Firmware comments also acknowledge NIST (WWVB), PTB (DCF77), NPL (MSF), and BPC signal specifications. These are standards references, separate from source-code authorship.
 

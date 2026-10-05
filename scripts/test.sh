@@ -11,3 +11,5 @@ test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread tests/test_radio_arbiter.cpp -o "$test_dir/radio-arbiter"
 "$test_dir/radio-arbiter"
+g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test_bx_protocol.cpp -o "$test_dir/bx-protocol"
+"$test_dir/bx-protocol"

@@ -17,7 +17,7 @@ FIRMWARE = ROOT / 'firmware/RadioClock_V3_2_2_Casio_BLE_Reliability/RadioClock_V
 
 
 def extract_function(source, name):
-    match = re.search(r'^static (?:bool|void|size_t) ' + name + r'\([^;]+?\)\s*\{', source, re.M)
+    match = re.search(r'^static (?:bool|void|size_t|int|const char\s*\*)\s*' + name + r'\([^;]+?\)\s*\{', source, re.M)
     if not match:
         raise AssertionError(f'Function {name} missing')
     depth = 1
@@ -42,7 +42,17 @@ MOCKS = r'''
 #include <string>
 #include <vector>
 #include <algorithm>
+#include "CasioBxProtocol.h"
 #define BLE_HS_CONN_HANDLE_NONE 0xffff
+#define BLE_NPL_TIME_FOREVER UINT32_MAX
+#define BLE_HS_EDONE 14
+#define BLE_HS_ENOTCONN 7
+#define BLE_HS_ATT_ERR(error) (0x100 + (error))
+#define BLE_ATT_ERR_INSUFFICIENT_AUTHEN 5
+#define BLE_ATT_ERR_INSUFFICIENT_AUTHOR 8
+#define BLE_ATT_ERR_INSUFFICIENT_ENC 15
+#define BLE_ATT_ERR_WRITE_NOT_PERMITTED 3
+#define BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN 13
 #define BT_REQUEST_TIMEOUT_MS 5000UL
 #define BT_PROTOCOL_BX5600_MIP 0
 #define CASIO_WATCH_FEATURES_SERVICE "service"
@@ -100,12 +110,18 @@ struct NimBLEUUID {
   std::string uuid;
   NimBLEUUID(const char* u) : uuid(u) {}
   std::string toString() const { return uuid; }
+  bool operator==(const NimBLEUUID& other) const { return uuid == other.uuid; }
+  bool operator!=(const NimBLEUUID& other) const { return !(*this == other); }
 };
 struct NimBLEAddress { NimBLEAddress(std::string, uint8_t) {} };
 struct NimBLERemoteCharacteristic {
   bool response = false, noResponse = false, notify = false, indicate = false;
   bool lastWriteResponse = false, writeResult = true;
-  int writes = 0;
+  bool subscribeResult = true, subscribed = false;
+  int writes = 0, subscriptions = 0;
+  uint16_t attributeHandle = 0;
+  std::deque<int> completionStatuses;
+  std::vector<std::vector<uint8_t>> payloads;
   std::string uuid = "test";
   std::function<void()> onWrite;
   bool canWrite() const { return response; }
@@ -113,12 +129,10 @@ struct NimBLERemoteCharacteristic {
   bool canNotify() const { return notify; }
   bool canIndicate() const { return indicate; }
   NimBLEUUID getUUID() const { return NimBLEUUID(uuid.c_str()); }
-  bool writeValue(const uint8_t*, size_t, bool r) {
-    lastWriteResponse = r; ++writes;
-    if (onWrite) onWrite();
-    return writeResult;
+  uint16_t getHandle() const { return attributeHandle; }
+  bool subscribe(bool, void (*)(NimBLERemoteCharacteristic*,uint8_t*,size_t,bool),bool) {
+    ++subscriptions; subscribed = subscribeResult; return subscribeResult;
   }
-  bool subscribe(bool, void (*)(NimBLERemoteCharacteristic*,uint8_t*,size_t,bool),bool) { return true; }
 };
 NimBLERemoteCharacteristic requestChar, dataChar, timeChar;
 struct NimBLERemoteService {
@@ -137,15 +151,19 @@ public:
   virtual void onConnect(NimBLEClient*) {}
   virtual void onConnectFail(NimBLEClient*, int) {}
   virtual void onDisconnect(NimBLEClient*, int) {}
+  virtual void onMTUChange(NimBLEClient*, uint16_t) {}
 };
 struct NimBLEClient {
   uint16_t handle = BLE_HS_CONN_HANDLE_NONE;
   bool pendingConnect = false, pendingDisconnect = false, missingService = false;
-  bool failStart = false;
+  bool failStart = false, securityResult = true;
+  uint16_t mtu = 255;
   bool selfDelete = false;
-  int connectCalls = 0;
+  int connectCalls = 0, securityCalls = 0;
   NimBLEClientCallbacks* callbacks = nullptr;
   uint16_t getConnHandle() const { return handle; }
+  uint16_t getMTU() const { return mtu; }
+  bool secureConnection() { ++securityCalls; return securityResult; }
   bool isConnected() const { return handle != BLE_HS_CONN_HANDLE_NONE && !pendingDisconnect; }
   void setClientCallbacks(NimBLEClientCallbacks* c, bool) { callbacks = c; }
   void setSelfDelete(bool a, bool b) { selfDelete = a || b; }
@@ -163,20 +181,74 @@ struct NimBLEClient {
   bool cancelConnect() { pendingDisconnect = true; pendingConnect = false; return true; }
   NimBLERemoteService* getService(NimBLEUUID) { return missingService ? nullptr : &featureService; }
 } retainedClient;
+struct ble_gatt_error { int status; uint16_t att_handle = 0; };
+struct ble_gatt_attr {};
+struct NimBLETaskData {
+  int m_flags = 0;
+  bool released = false;
+  void* m_pBuf = nullptr;
+  explicit NimBLETaskData(void* = nullptr, int flags = 0, void* buffer = nullptr)
+      : m_flags(flags), m_pBuf(buffer) {}
+};
+std::function<void()> pendingGattCallback;
+struct NimBLEUtils {
+  static bool taskWait(NimBLETaskData& task, uint32_t) {
+    const uint32_t started = tick;
+    while (!task.released && tick - started < 10000) delay(5);
+    assert(task.released); return true;
+  }
+  static void taskRelease(const NimBLETaskData& task, int status = 0) {
+    auto& result = const_cast<NimBLETaskData&>(task);
+    result.m_flags = status; result.released = true;
+  }
+  static const char* returnCodeToString(int) { return "mock ATT status"; }
+};
+NimBLERemoteCharacteristic& mockAttribute(uint16_t handle) {
+  for (auto* c : featureService.chars) if (c->attributeHandle == handle) return *c;
+  assert(false && "Unknown GATT handle"); return dataChar;
+}
+int mockWrite(uint16_t handle, const void* bytes, uint16_t length, bool response) {
+  auto& c = mockAttribute(handle);
+  c.lastWriteResponse = response; ++c.writes;
+  const auto* data = static_cast<const uint8_t*>(bytes);
+  c.payloads.emplace_back(data, data + length);
+  if (c.onWrite) c.onWrite();
+  if (!c.completionStatuses.empty()) {
+    int status = c.completionStatuses.front(); c.completionStatuses.pop_front(); return status;
+  }
+  return c.writeResult ? 0 : BLE_HS_ENOTCONN;
+}
+int ble_gattc_write_no_rsp_flat(uint16_t connection, uint16_t handle, const void* bytes, uint16_t length) {
+  assert(connection != BLE_HS_CONN_HANDLE_NONE); return mockWrite(handle, bytes, length, false);
+}
+int ble_gattc_write_flat(uint16_t connection, uint16_t handle, const void* bytes, uint16_t length,
+                        int (*callback)(uint16_t,const ble_gatt_error*,ble_gatt_attr*,void*),void* argument) {
+  assert(connection != BLE_HS_CONN_HANDLE_NONE);
+  assert(!pendingGattCallback);
+  const int status = mockWrite(handle, bytes, length, true);
+  pendingGattCallback = [=] {
+    const ble_gatt_error error{retainedClient.handle == BLE_HS_CONN_HANDLE_NONE ? BLE_HS_ENOTCONN : status};
+    callback(connection, &error, nullptr, argument);
+  };
+  return 0;
+}
 NimBLEClient* btClient = nullptr;
 NimBLERemoteService* btService = nullptr;
 NimBLERemoteCharacteristic *btSpRequest = nullptr, *btSpData = nullptr, *btSetChar = nullptr;
 struct NimBLEDevice {
   static int allocations;
+  static uint16_t preferredMtu;
   static NimBLEClient* createClient() { ++allocations; return &retainedClient; }
+  static bool setMTU(uint16_t value) { preferredMtu = value; return true; }
   static void deleteClient(NimBLEClient*) { assert(false && "Client must remain alive during GAP teardown"); }
 };
 int NimBLEDevice::allocations = 0;
+uint16_t NimBLEDevice::preferredMtu = 0;
 bool btBleBusy = false, btBleInitialized = true, rfDemand = false, allowHostProgress = true;
 std::function<void()> nextDelayHook;
 String btLastWatchAddress("aa:bb:cc:dd:ee:ff");
 uint8_t btLastWatchAddressType = 0;
-uint32_t btConnectionAttempts = 0, btWriteAcknowledgements = 0, btResponseErrors = 0;
+uint32_t btConnectionAttempts = 0, btWriteAcknowledgements = 0, btResponseErrors = 0, btNotifications = 0;
 size_t btResponseLength = 0;
 unsigned long btLastFragmentMillis = 0;
 bool btResponseOverflow = false, btResponseActive = false;
@@ -188,7 +260,6 @@ static void prepareBtResponse(uint8_t header) {
   btResponseActive = true; btExpectedHeader = header; btResponseLength = 0;
   btLastFragmentMillis = millis(); btResponseOverflow = false;
 }
-static void gshockNotifyCallback(NimBLERemoteCharacteristic*,uint8_t*,size_t,bool) {}
 '''
 
 DRIVER = r'''
@@ -218,25 +289,79 @@ void delay(unsigned long ms) {
     retainedClient.pendingConnect = false;
     retainedClient.callbacks->onConnect(&retainedClient);
   }
+  if (pendingGattCallback && ((!rfDemand && !retainedClient.pendingDisconnect) || btClientQuiescent())) {
+    auto callback = std::move(pendingGattCallback); pendingGattCallback = {}; callback();
+  }
 }
 int main() {
   requestChar.noResponse = true;
   requestChar.uuid = "request";
+  requestChar.attributeHandle = 1;
   dataChar.response = dataChar.notify = true;
   dataChar.uuid = "data";
+  dataChar.attributeHandle = 2;
   timeChar.response = true;
   timeChar.uuid = "time";
+  timeChar.attributeHandle = 3;
   // A genuine SP_REQUEST Write Without Response characteristic is accepted.
   assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
   assert(btBleBusy && !btClientQuiescent());
   assert(!retainedClient.selfDelete);
   assert(NimBLEDevice::allocations == 1);
+  assert(NimBLEDevice::preferredMtu == 517);
+  assert(dataChar.subscribed && dataChar.subscriptions == 1);
+  assert(requestChar.subscriptions == 0 && timeChar.subscriptions == 0);
   uint8_t payload[] = {0x05};
   assert(writeBt(btSpRequest,payload,sizeof(payload),false));
   assert(!requestChar.lastWriteResponse && btWriteAcknowledgements == 0);
   assert(!writeBt(btSpRequest,payload,sizeof(payload),true));
   assert(writeBt(btSpData,payload,sizeof(payload),true));
   assert(dataChar.lastWriteResponse && btWriteAcknowledgements == 1);
+  // TIME emits unrelated notifications on real watches. Even a matching
+  // header must not start, or append to, the SP_DATA response stream.
+  prepareBtResponse(0x05);
+  uint8_t first[] = {0x05,0x11};
+  uint8_t continuation[] = {0x22,0x33};
+  gshockNotifyCallback(btSetChar,first,sizeof(first),true);
+  assert(btResponseLength == 0);
+  gshockNotifyCallback(btSpData,first,sizeof(first),true);
+  assert(btResponseLength == sizeof(first));
+  gshockNotifyCallback(btSetChar,continuation,sizeof(continuation),true);
+  assert(btResponseLength == sizeof(first));
+  gshockNotifyCallback(btSpData,continuation,sizeof(continuation),true);
+  assert(btResponseLength == sizeof(first) + sizeof(continuation));
+  cancelBtResponse();
+  // The complete 133-byte settings echo needs one ATT Write Request. A low
+  // MTU must reject it without submitting or silently truncating any prefix.
+  std::vector<uint8_t> settings(133);
+  for (size_t i = 0; i < settings.size(); ++i) settings[i] = static_cast<uint8_t>(i);
+  int writesBeforeMtuGuard = dataChar.writes;
+  retainedClient.mtu = 23;
+  assert(!writeBt(btSpData,settings.data(),settings.size(),true));
+  assert(dataChar.writes == writesBeforeMtuGuard);
+  retainedClient.mtu = CasioBxProtocol::kMinimumMtu;
+  assert(writeBt(btSpData,settings.data(),settings.size(),true));
+  assert(dataChar.payloads.back() == settings);
+  // An ATT rejection must be reported as failure and never counted as an ack.
+  uint32_t acknowledgements = btWriteAcknowledgements;
+  dataChar.completionStatuses.push_back(BLE_HS_ATT_ERR(BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN));
+  assert(!writeBt(btSpData,settings.data(),settings.size(),true));
+  assert(btWriteAcknowledgements == acknowledgements);
+  // Authentication retry repeats the complete original packet exactly once.
+  int securityBeforeRetry = retainedClient.securityCalls;
+  size_t payloadsBeforeRetry = dataChar.payloads.size();
+  dataChar.completionStatuses = {BLE_HS_ATT_ERR(BLE_ATT_ERR_INSUFFICIENT_AUTHEN),0};
+  assert(writeBt(btSpData,settings.data(),settings.size(),true));
+  assert(retainedClient.securityCalls == securityBeforeRetry + 1);
+  assert(dataChar.payloads.size() == payloadsBeforeRetry + 2);
+  assert(dataChar.payloads[payloadsBeforeRetry] == settings && dataChar.payloads.back() == settings);
+  assert(btWriteAcknowledgements == acknowledgements + 1);
+  dataChar.completionStatuses = {BLE_HS_ATT_ERR(BLE_ATT_ERR_INSUFFICIENT_AUTHEN),
+                                 BLE_HS_ATT_ERR(BLE_ATT_ERR_INSUFFICIENT_AUTHEN)};
+  assert(!writeBt(btSpData,settings.data(),settings.size(),true));
+  assert(dataChar.completionStatuses.empty());
+  assert(retainedClient.securityCalls == securityBeforeRetry + 2);
+  retainedClient.mtu = 255;
   // RF demand cancels both writes and notification waits immediately.
   rfDemand = true;
   int previousWrites = dataChar.writes;
@@ -250,14 +375,11 @@ int main() {
   // host callout must disconnect independently, without awaiting ATT timeout.
   dataChar.onWrite = [] {
     rfDemand = true;
-    uint32_t started = tick;
-    while (!btClientQuiescent() && tick - started < 100) delay(5);
-    assert(btClientQuiescent() && tick - started < 100);
-    rfDemand = false;
-    dataChar.writeResult = false; // ATT operation released by disconnect.
   };
+  started = tick;
   assert(!writeBt(btSpData,payload,sizeof(payload),true));
-  dataChar.writeResult = true;
+  assert(btClientQuiescent() && tick - started < 100);
+  rfDemand = false;
   dataChar.onWrite = {};
   disconnectGShock();
   assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
@@ -287,6 +409,23 @@ int main() {
   assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
   assert(btClientQuiescent());
   timeChar.response = true;
+  // Notifications on TIME cannot stand in for the required SP_DATA stream.
+  dataChar.notify = false;
+  timeChar.notify = true;
+  assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
+  assert(btClientQuiescent());
+  assert(timeChar.subscriptions == 0);
+  dataChar.notify = true;
+  dataChar.subscribeResult = false;
+  assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
+  assert(btClientQuiescent());
+  dataChar.subscribeResult = true;
+  // Negotiation that remains at ATT MTU 23 cannot run this protocol safely.
+  retainedClient.mtu = 23;
+  started = tick;
+  assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
+  assert(tick - started >= 2000 && btClientQuiescent());
+  retainedClient.mtu = 255;
   // A schedule becoming due during asynchronous connection also cancels safely.
   nextDelayHook = [] { rfDemand = true; };
   assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
@@ -326,7 +465,7 @@ int main() {
   disconnectGShock();
   assert(btClientQuiescent());
   failMonitorReset = false;
-  std::puts("BLE lifecycle, RF cancellation, characteristic capabilities and write modes passed");
+  std::puts("BLE lifecycle, RF cancellation, MTU guards, ATT errors, authentication retry and SP_DATA notifications passed");
 }
 '''
 
@@ -338,14 +477,17 @@ class BleLifecycleTest(unittest.TestCase):
         start = source.index('static std::atomic<bool> btClientConnected')
         end = source.index('static void gshockNotifyCallback', start)
         lifecycle = source[start:end]
-        names = ['waitBt', 'copyBt', 'writeBt', 'disconnectGShock',
+        names = ['gshockNotifyCallback', 'waitBt', 'copyBt', 'btWriteComplete', 'writeBt', 'disconnectGShock',
                  'validateBtCharacteristic', 'connectGShock', 'bxRequest']
-        functions = '\n\n'.join(extract_function(source, n) for n in names)
+        stage = re.search(r'^static const char\s*\*btGattStage\s*=\s*[^;]+;', source, re.M)
+        self.assertIsNotNone(stage, 'GATT stage diagnostic state missing')
+        functions = stage.group(0) + '\n\n' + '\n\n'.join(extract_function(source, n) for n in names)
         with tempfile.TemporaryDirectory(prefix='radioclock-ble-test-') as tmp:
             unit = Path(tmp) / 'test.cpp'
             binary = Path(tmp) / 'test'
             unit.write_text(MOCKS + '\n' + lifecycle + '\n' + functions + '\n' + DRIVER)
-            subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror', str(unit), '-o', str(binary)], check=True)
+            subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                            '-I', str(FIRMWARE.parent), str(unit), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
 
 
