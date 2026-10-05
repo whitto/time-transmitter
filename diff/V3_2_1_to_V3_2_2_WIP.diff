@@ -1,0 +1,73 @@
+--- /mnt/data/RadioClock_Codex_Handoff_V3_2_2_WIP/baseline/RadioClock_V3_2_1_Casio_BLE_Reliability.ino	2026-10-05 22:43:25.274186803 +0000
++++ /mnt/data/RadioClock_Codex_Handoff_V3_2_2_WIP/firmware/RadioClock_V3_2_2_Casio_BLE_Reliability.ino	2026-10-05 22:43:25.268238403 +0000
+@@ -1,5 +1,5 @@
+ //
+-// RadioClock_V3_2_1_Casio_BLE_Reliability.ino
++// RadioClock_V3_2_2_Casio_BLE_Reliability.ino
+ // Based on RadioClock_JJY40_HWTimer_Validated_V2.7; Casio time-only BLE protocol selection.
+ // Retains V2.7 RF timing, encoding, timezone, LittleFS, Wi-Fi power and flash-wear improvements.
+ // Scheduled watch-initiated BLE: GW-BX5600 MIP, Standard digital/hybrid, and experimental analogue time-only.
+@@ -13,16 +13,15 @@
+ //   - JJY envelope = 0.2/0.5/0.8 s, selected by system clock phase
+ //   - No software GPIO bit-banging of the 40 kHz carrier
+ //
+-// V3.2.1 builds on V3.2 and adds explicit first-time/replacement watch pairing:
+-//   - NimBLE-Arduino 2.5.1+ replaces the larger Bluedroid client stack.
+-//   - Pair Watch control added to Settings with safe temporary rebind mode.
+-  - Existing watch binding is replaced only after a successful pairing connection/time write.
+-  - Redesigned dashboard/navigation with progressive disclosure and mobile-first controls.
++// V3.2.2 builds on V3.2.1 and hardens the Casio Bluetooth workflow:
++//   - Explicit Pair Watch remains separate from normal manual Sync.
++//   - Manual Sync is restartable instead of returning a vague "already busy" error.
++//   - Optional Always Wait mode continuously listens for the already-paired selected watch.
++//   - Bluetooth and LF radio transmission are mutually exclusive; RF has priority.
++//   - NimBLE is fully deinitialized for the duration of any RF transmission and reinitialized afterwards.
++//   - Existing watch binding is replaced only after a successful pairing connection/time write.
+ //   - Static web UI remains gzip-compressed in flash and streamed from PROGMEM.
+-//   - Fixes overlap-rotation stale indexing and single-core task startup.
+-//   - RF pause is a true quiescent barrier; timezone work stays out of radioTask.
+-//   - BLE discovery handoff no longer mutates shared String state from callback context.
+-//   - SSID/password/timezone inputs are validated instead of silently truncated/falling back.
++//   - NimBLE-Arduino 2.5.1+ is required for reliable shutdown/re-init on Arduino-ESP32 3.3.11.
+ 
+ // Using software radio on ESP32/ESP32-C3.
+ //
+@@ -89,7 +88,7 @@
+ 
+ // Configuration Constants
+ #define DEVICENAME_PREFIX "RadioStation"     // Device name prefix for WiFi AP mode
+-#define FIRMWARE_VERSION "V3.2.1"
++#define FIRMWARE_VERSION "V3.2.2"
+ 
+ #define DEFAULT_TZ_NAME "Asia/Tokyo"
+ #define CONFIG_FILE "/config.json"           // WiFi and timezone configuration file
+@@ -516,6 +515,15 @@
+ int btSlotAttemptYday[BT_SYNC_SLOT_COUNT] = {-1,-1,-1,-1};
+ volatile bool btWindowActive = false;
+ bool btManualSyncRequested = false;
++// When enabled, RadioClock continuously scans for the already-paired selected
++// watch while RF is idle. Pairing itself always remains an explicit action.
++bool btAlwaysWaitEnabled = false;
++bool btPersistentWaitActive = false;
++// RF has absolute priority over BLE. radioTask sets this request when a radio
++// schedule becomes due while the BLE controller is still initialized/active;
++// loop() performs the NimBLE shutdown and then asks radioTask to retry.
++volatile bool btRadioSuspendRequested = false;
++bool btSuspendedByRadio = false;
+ // Pair mode deliberately ignores the currently learned address for the selected
+ // profile, but does not erase that binding until the new watch has completed a
+ // successful connection/time write. This makes a failed re-pair attempt safe.
+@@ -560,8 +568,12 @@
+ static bool btWatchNameMatches(int protocol, const String &name);
+ bool bluetoothTimeSlotConflicts(int minuteOfDay);
+ void resetBluetoothDayIfNeeded(void);
+-void startBluetoothWindow(int slot);
++void startBluetoothWindow(int slot, bool persistent = false);
+ void stopBluetoothWindow(void);
++bool radioScheduleActiveNow(void);
++bool bluetoothActivityPresent(void);
++void shutdownBluetoothForRadio(void);
++static void disconnectGShock(void);
+ 
+ 
+ //...................................................................

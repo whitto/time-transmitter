@@ -1,0 +1,204 @@
+#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+
+// Exercise the actual embedded-page script with a small DOM/API boundary.
+// No browser, network, or third-party packages are needed for this check.
+const html = await readFile(new URL('../ui/radioclock.html', import.meta.url), 'utf8');
+const source = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+assert.ok(source, 'UI must have a JavaScript block');
+const elements = new Map();
+class Element {
+  constructor(id) {
+    this.id = id;
+    this.value = '';
+    this.checked = false;
+    this.disabled = false;
+    this.hidden = false;
+    this.className = '';
+    this._text = '';
+    this._html = '';
+    this.htmlWrites = [];
+    this.classList = {
+      toggle: (name, enabled) => {
+        const names = new Set(this.className.split(/\s+/).filter(Boolean));
+        if (enabled) names.add(name); else names.delete(name);
+        this.className = [...names].join(' ');
+      },
+      contains: name => this.className.split(/\s+/).includes(name),
+    };
+  }
+  set textContent(value) {
+    this._text = String(value);
+    this._html = this._text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  }
+  get textContent() { return this._text; }
+  set innerHTML(value) { this.htmlWrites.push(String(value)); this._html = String(value); }
+  get innerHTML() { return this._html; }
+  contains() { return false; }
+}
+for (const match of html.matchAll(/\bid="([^"]+)"/g)) {
+  assert.ok(!elements.has(match[1]), `duplicate ID: ${match[1]}`);
+  elements.set(match[1], new Element(match[1]));
+}
+const element = id => {
+  assert.ok(elements.has(id), `UI referenced missing DOM element: ${id}`);
+  return elements.get(id);
+};
+const state = {
+  ssid: 'test-network', timezone: 'Australia/Brisbane', full_time_tx: false,
+  full_time_station: 0, transmission_offset_minutes: 0, wifi_power_mode: 1,
+  bt_manual_profile: 0, bt_manual_protocol: 0, bt_always_wait: false,
+  bt_profiles: [{ id: 0, bound: false, name: '', address: '' }], bt_times: [],
+  bt_state: 'Waiting for watch', bt_pairing: false,
+};
+const status = {
+  time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
+  firmware_version: 'V3.2.2', radio_active: false, station: -1,
+  bt_last_sync_status: 'Never synced', bt_day_complete: false,
+};
+const requests = [];
+let failNextSettings = false;
+let releaseStatus;
+let deferNextStatus = false;
+class FormData {
+  constructor() { this.fields = []; }
+  append(key, value) { this.fields.push([key, value]); }
+  *entries() { yield* this.fields; }
+}
+const response = (data, code = 200) => ({ ok: code < 400, status: code, json: async () => structuredClone(data) });
+const fetch = async (url, options = {}) => {
+  const method = options.method ?? 'GET';
+  const fields = options.body instanceof FormData ? Object.fromEntries(options.body.entries()) : {};
+  requests.push({ url, method, fields });
+  if (method === 'POST' && ['/api/config', '/api/settings'].includes(url)) {
+    if (failNextSettings) {
+      failNextSettings = false;
+      return response({ status: 'error', message: 'Rejected setting' }, 409);
+    }
+    for (const [key, value] of Object.entries(fields)) {
+      if (key === 'bt_always_wait') state[key] = value === '1';
+      else if (['wifi_power_mode', 'bt_manual_profile', 'bt_manual_protocol'].includes(key)) state[key] = Number(value);
+    }
+    return response({ status: 'success' });
+  }
+  if (url === '/api/config') return response(state);
+  if (url === '/api/status') {
+    const snapshot = { ...structuredClone(state), ...structuredClone(status) };
+    if (deferNextStatus) {
+      deferNextStatus = false;
+      await new Promise(resolve => { releaseStatus = resolve; });
+    }
+    return response(snapshot);
+  }
+  if (url === '/api/stations') return response([{ id: 0, name: 'JJY', encoding: 'JJY 40 kHz' }]);
+  if (url === '/api/schedules') return response([]);
+  if (url === '/api/diagnostics') return response({ wifi_connected: true, radio_active: false, heap_free: 100000 });
+  if (url === '/api/bluetooth-sync' && method === 'POST') {
+    state.bt_state = 'Waiting for watch';
+    return response({ message: 'Manual window restarted' });
+  }
+  if (url === '/api/bluetooth-pair' && method === 'POST') {
+    state.bt_state = 'Pairing'; state.bt_pairing = true;
+    return response({ message: 'Pairing window opened' });
+  }
+  throw new Error(`Unexpected request: ${method} ${url}`);
+};
+const context = vm.createContext({
+  document: { getElementById: element, querySelectorAll: () => [], activeElement: null },
+  localStorage: { getItem: () => null, setItem() {} },
+  fetch, FormData, setTimeout: () => 1, clearTimeout() {}, setInterval() {},
+  scrollTo() {}, confirm: () => true, console,
+});
+const evaluate = code => vm.runInContext(code, context);
+evaluate(source);
+// Allow the page's real startup request chain to finish before interacting.
+for (let i = 0; i < 12; i++) await new Promise(resolve => setImmediate(resolve));
+assert.equal(element('pairedWatchInfo').textContent, 'No watch paired');
+assert.equal(element('pairedWatchDetails').hidden, true);
+assert.equal(element('wifiKeepOn').checked, false);
+assert.equal(element('wifiScheduled').classList.contains('active'), true);
+
+// Unknown watch text must be assigned as text, never interpreted as HTML.
+state.bt_profiles = [{ id: 0, bound: true, address: '<script>bad()</script>', name: '<img src=x onerror=bad()>', protocol: 0 }];
+await evaluate('tick()');
+assert.equal(element('pairedWatchInfo').textContent, 'Currently paired watch');
+assert.equal(element('pairedWatchDetails').hidden, false);
+assert.equal(element('pairedWatchName').textContent, state.bt_profiles[0].name);
+assert.equal(element('pairedWatchAddress').textContent, state.bt_profiles[0].address);
+assert.equal(element('pairedWatchProfile').textContent, 'Watch 1');
+assert.equal(element('pairedWatchProtocol').textContent, 'GW-BX5600 MIP');
+assert.ok(!element('pairedWatchName').innerHTML.includes('<img'));
+assert.ok(!element('pairedWatchAddress').innerHTML.includes('<script'));
+assert.deepEqual(element('pairedWatchName').htmlWrites, []);
+assert.deepEqual(element('pairedWatchAddress').htmlWrites, []);
+
+await evaluate('setBtAlwaysWait(true)');
+assert.deepEqual(requests.at(-1), { url: '/api/settings', method: 'POST', fields: { bt_always_wait: '1' } });
+assert.equal(element('btAlwaysWait').checked, true);
+assert.equal(element('btAlwaysWaitStatus').textContent, 'Always Wait: enabled');
+await evaluate('setBtAlwaysWait(false)');
+assert.equal(requests.at(-1).fields.bt_always_wait, '0');
+assert.equal(element('btAlwaysWait').checked, false);
+failNextSettings = true;
+await evaluate('setBtAlwaysWait(true)');
+assert.equal(element('btAlwaysWait').checked, false, 'rejected Always Wait change must restore saved state');
+assert.equal(element('btAlwaysWait').disabled, false);
+
+await evaluate('setWifiPowerMode(0)');
+assert.deepEqual(requests.at(-1), { url: '/api/config', method: 'POST', fields: { wifi_power_mode: '0' } });
+assert.equal(element('wifiKeepOn').checked, true);
+assert.equal(element('wifiAlways').classList.contains('active'), true);
+assert.equal(element('wifiScheduled').classList.contains('active'), false);
+await evaluate('setWifiPowerMode(1)');
+assert.equal(requests.at(-1).fields.wifi_power_mode, '1');
+assert.equal(element('wifiKeepOn').checked, false);
+assert.equal(element('wifiScheduled').classList.contains('active'), true);
+failNextSettings = true;
+await evaluate('setWifiPowerMode(0)');
+assert.equal(element('wifiKeepOn').checked, false, 'rejected Wi-Fi change must restore saved state');
+assert.equal(element('wifiScheduled').classList.contains('active'), true);
+assert.equal(element('wifiKeepOn').disabled, false);
+
+// A status response captured before a saved setting must not undo that setting.
+deferNextStatus = true;
+const staleTick = evaluate('tick()');
+await evaluate('setBtAlwaysWait(true)');
+releaseStatus(); await staleTick;
+assert.equal(element('btAlwaysWait').checked, true, 'stale polling response must not revert a successful save');
+
+const beforeSync = requests.length;
+await evaluate("syncBluetooth($('btSyncButton'))");
+await evaluate("syncBluetooth($('btSyncButton'))");
+assert.deepEqual(requests.slice(beforeSync).map(r => [r.url, r.method]), [['/api/bluetooth-sync', 'POST'], ['/api/bluetooth-sync', 'POST']]);
+assert.equal(element('btSyncButton').disabled, false);
+await evaluate("pairWatch($('btPairSettingsButton'))");
+assert.equal(requests.at(-1).url, '/api/bluetooth-pair');
+await evaluate('tick()');
+assert.equal(element('btListenPill').textContent, 'Pairing');
+assert.equal(element('pairPill').textContent, 'Pairing');
+assert.equal(element('pairedWatchName').textContent, state.bt_profiles[0].name, 'pair request must leave displayed binding intact');
+state.bt_state = 'Bluetooth off for RF';
+status.radio_active = true;
+await evaluate('tick()');
+assert.equal(element('btListenPill').textContent, 'Bluetooth off for RF');
+assert.equal(element('btListenPill').classList.contains('warn'), true);
+assert.equal(element('btAlwaysWaitStatus').textContent, 'Always Wait: enabled', 'RF pause must not appear to disable the saved preference');
+
+// Simulate a completed replacement pairing changing the selected watch record.
+state.bt_pairing = false;
+state.bt_manual_profile = 1;
+state.bt_manual_protocol = 1;
+state.bt_profiles.push({ id: 1, bound: true, address: '11:22:33:44:55:66', name: 'Replacement watch', protocol: 1 });
+state.bt_state = 'Waiting for watch';
+status.radio_active = false;
+await evaluate('tick()');
+assert.equal(element('pairedWatchName').textContent, 'Replacement watch');
+assert.equal(element('pairedWatchProfile').textContent, 'Watch 2');
+assert.equal(element('pairedWatchProtocol').textContent, 'Standard digital / hybrid');
+assert.equal(element('btManualProfile').value, '1');
+assert.equal(element('btPairProfile').value, '1');
+assert.equal(element('btListenPill').textContent, 'Waiting for watch');
+assert.equal(element('btAlwaysWaitStatus').textContent, 'Always Wait: enabled');
+console.log('UI handler tests passed: settings, rollback, stale polling, watch text safety, separate sync/pair routes, RF state, replacement binding.');

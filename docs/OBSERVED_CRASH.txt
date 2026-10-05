@@ -1,0 +1,25 @@
+Observed on V3.2 testing while attempting GW-BX5600 sync:
+
+WiFi connected! Web server at http://10.0.1.137
+Web server started
+radio task and aligned scheduler started.
+NTP sync requested from web UI
+BT: NTP synchronization requested before watch connection
+BT: waiting for watch using GW-BX5600 MIP protocol
+BT: connecting with GW-BX5600 MIP time-only protocol
+BT: Casio watch connected
+BT: GW-BX5600 SP characteristics missing/not writable
+BT: Casio watch disconnected (reason=534)
+Guru Meditation Error: Core  0 panic'ed (LoadProhibited). Exception was unhandled.
+
+Core  0 register dump:
+PC      : 0x400e8cbd  PS      : 0x00060c30  A0      : 0x800e8d49  A1      : 0x3ffd6800
+A2      : 0x3ffcdf34  A3      : 0xffffffff  A4      : 0x80083a22  A5      : 0x3ffc056c
+A6      : 0x00000001  A7      : 0x3ffcdf54  A8      : 0x00000000  A9      : 0x3ffd67e0
+A10     : 0x00033842  A11     : 0x00060c23  A12     : 0x00060c20  A13     : 0x3f41c264
+A14     : 0x3ffd6b20  A15     : 0x0000cdcd  SAR     : 0x0000001f  EXCCAUSE: 0x0000001c
+EXCVADDR: 0x0000000c  LBEG    : 0x4008387d  LEND    : 0x40083885  LCOUNT  : 0x00000027
+
+Primary suspected issues already identified:
+1. SP_REQUEST is expected to support Write Without Response, but older code tests canWrite() and forces response=true for writes.
+2. Client teardown is too aggressive: disconnect followed immediately by deleteClient during/near NimBLE disconnect/GATT teardown can invalidate callback/client state and plausibly cause the LoadProhibited crash.
