@@ -1,7 +1,7 @@
 # JJY transmitter audit
 
 The user reported that the watch showed signal level L1 instead of L3. I
-compared the current V3.3 firmware and the available earlier RadioClock
+compared the current V3.4 firmware and the available earlier RadioClock
 source `RadioClock_JJY40_HWTimer_Validated_V2.6.ino` from the project's
 `Old-versions` history. No V2.7 or V2.8 source was present in the accessible
 repository branches or tags; an exact V2.7/V2.8 link would allow a direct
@@ -37,7 +37,7 @@ set by the external driver, coil/antenna, tuning, supply voltage, wiring, and
 receiver orientation. A watch's L1/L3 indication therefore cannot by itself
 show that firmware TX power changed.
 
-The V3.3 RF changes address scheduling, wall-clock phase, and safe
+The V3.4 RF changes address scheduling, wall-clock phase, and safe
 BLE/controller handoff. They do not lower the JJY carrier duty or frequency.
 The build's RF acceptance still needs a physical test with Bluetooth idle,
 the correct JJY station selected, the antenna/driver connected, and the watch

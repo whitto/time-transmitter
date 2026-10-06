@@ -48,14 +48,16 @@ const element = id => {
 };
 const state = {
   ssid: 'test-network', timezone: 'Australia/Brisbane', full_time_tx: false,
-  full_time_station: 0, transmission_offset_minutes: 0, wifi_power_mode: 1,
+  full_time_station: 0, transmission_offset_minutes: 0,
+  bt_timezone: 'Australia/Brisbane', bt_time_offset_minutes: 0, wifi_power_mode: 1,
   bt_manual_profile: 0, bt_manual_protocol: 0, bt_always_wait: false,
   bt_profiles: [{ id: 0, bound: false, name: '', address: '' }], bt_times: [],
   bt_state: 'Waiting for watch', bt_pairing: false,
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V3.3', radio_active: false, station: -1,
+  firmware_version: 'V3.4', radio_active: false, station: -1,
+  bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
 };
 const requests = [];
@@ -80,6 +82,8 @@ const fetch = async (url, options = {}) => {
     for (const [key, value] of Object.entries(fields)) {
       if (key === 'bt_always_wait') state[key] = value === '1';
       else if (['wifi_power_mode', 'bt_manual_profile', 'bt_manual_protocol'].includes(key)) state[key] = Number(value);
+      else if (key === 'bt_time_offset_minutes') state[key] = Number(value);
+      else if (key === 'bt_timezone') state[key] = value;
     }
     return response({ status: 'success' });
   }
@@ -119,6 +123,16 @@ assert.equal(element('pairedWatchInfo').textContent, 'No watch paired');
 assert.equal(element('pairedWatchDetails').hidden, true);
 assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
+assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
+assert.equal(element('btTimezone').value, 'Australia/Brisbane');
+const timezoneRequestStart = requests.length;
+await evaluate("setBtTimezone('Asia/Tokyo')");
+assert.deepEqual(requests.slice(timezoneRequestStart).find(r => r.method === 'POST'), { url: '/api/config', method: 'POST', fields: { bt_timezone: 'Asia/Tokyo' } });
+assert.equal(element('btTimezone').value, 'Asia/Tokyo');
+const offsetRequestStart = requests.length;
+await evaluate("setBtTimeOffset('60')");
+assert.deepEqual(requests.slice(offsetRequestStart).find(r => r.method === 'POST'), { url: '/api/config', method: 'POST', fields: { bt_time_offset_minutes: '60' } });
+assert.equal(element('btTimeOffset').value, '60');
 
 // Unknown watch text must be assigned as text, never interpreted as HTML.
 state.bt_profiles = [{ id: 0, bound: true, address: '<script>bad()</script>', name: '<img src=x onerror=bad()>', protocol: 0 }];

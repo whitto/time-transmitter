@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V3_3_Casio_BLE_Reliability/RadioClock_V3_3_Casio_BLE_Reliability.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V3_4_Casio_BLE_Reliability/RadioClock_V3_4_Casio_BLE_Reliability.ino'
 
 
 def balanced_block(source, start):
@@ -233,6 +233,9 @@ constexpr int SN_JJY_E = 0, SN_BPC = 5, WIFI_POWER_ALWAYS_ON = 0, WIFI_POWER_SCH
 char ssid[64] = "test", passwd[64] = "";
 String timezone_name(DEFAULT_TZ_NAME);
 int full_time_station = SN_JJY_E, transmission_offset_minutes = 0, wifiPowerMode = 0;
+constexpr const char *DEFAULT_BT_TIMEZONE = "Australia/Brisbane";
+String btTimezoneName(DEFAULT_BT_TIMEZONE);
+int btTimeOffsetMinutes = 0;
 bool configDirty = false;
 unsigned long configDirtyBecause = 0;
 static bool validTimezoneName(const String&) { return true; }
@@ -375,6 +378,7 @@ int main(int argc, char**) {
   assert(!btWindowActive); serviceBluetoothSync(); assert(btPersistentWaitActive);
 
   // Exercise the real serialization and load, including all four profile protocols.
+  btTimezoneName = "Asia/Tokyo"; btTimeOffsetMinutes = 30;
   btProfileProtocol[1] = BT_PROTOCOL_ANALOGUE;
   btProfileProtocol[2] = BT_PROTOCOL_STANDARD;
   btProfileProtocol[3] = BT_PROTOCOL_ANALOGUE;
@@ -383,8 +387,20 @@ int main(int argc, char**) {
   for (int i = 0; i < BT_WATCH_PROFILE_COUNT; ++i) { btProfileAddress[i] = ""; btProfileProtocol[i] = 0; }
   loadConfig();
   assert(btAlwaysWaitEnabled && btManualProtocol == BT_PROTOCOL_STANDARD);
+  assert(btTimezoneName == "Asia/Tokyo" && btTimeOffsetMinutes == 30);
   assert(btProfileAddress[0] == "11:22:33:44:55:66" && btProfileAddress[1] == "aa:bb:cc:dd:ee:ff");
   assert(btProfileProtocol[0] == 1 && btProfileProtocol[1] == 2 && btProfileProtocol[2] == 1 && btProfileProtocol[3] == 2);
+
+  // BLE civil time is independent from the JJY timezone/offset and handles
+  // the fixed-zone defaults plus an additive watch-only offset.
+  struct tm btLocal = {};
+  btTimezoneName = "Australia/Brisbane"; btTimeOffsetMinutes = 0;
+  bluetoothLocalTime(fakeEpoch, btLocal);
+  assert(btLocal.tm_year == 124 && btLocal.tm_mon == 0 && btLocal.tm_mday == 1 && btLocal.tm_hour == 22);
+  btTimezoneName = "Asia/Tokyo"; btTimeOffsetMinutes = 0;
+  bluetoothLocalTime(fakeEpoch, btLocal); assert(btLocal.tm_hour == 21);
+  btTimezoneName = "Australia/Brisbane"; btTimeOffsetMinutes = 60;
+  bluetoothLocalTime(fakeEpoch, btLocal); assert(btLocal.tm_hour == 23);
 
   // RF has priority, with disconnect and physical-controller failures keeping RF off.
   mockQuiescent = false;
@@ -463,7 +479,9 @@ class BluetoothWorkflowTest(unittest.TestCase):
                  'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
                  'btMinutesOfDay', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'attemptBluetoothSync', 'serviceBluetoothSync',
-                 'bluetoothSettingsMutable', 'bluetoothState', 'loadConfig', 'writeConfigNow', 'saveConfig']
+                 'bluetoothSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
+                 'btLastSunday', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
+                 'loadConfig', 'writeConfigNow', 'saveConfig']
         functions = '\n\n'.join(extract_function(source, n) for n in names)
         routes = '\n'.join(extract_route(source, path) for path in
                            ['/api/settings', '/api/bluetooth-pair', '/api/bluetooth-sync'])
