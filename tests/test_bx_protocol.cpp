@@ -1,4 +1,4 @@
-#include "../firmware/RadioClock_V3_5_Casio_BLE_Reliability/CasioBxProtocol.h"
+#include "../firmware/RadioClock_V4_0_Casio_BLE_Reliability/CasioBxProtocol.h"
 
 #include <algorithm>
 #include <array>

@@ -1,12 +1,17 @@
-# Time Transmitter — RadioClock V3.5
+# Time Transmitter — RadioClock V4.0
 
 Time Transmitter is an ESP32 project for synchronizing watches with local LF time signals or Casio Bluetooth time delivery. It combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar),  the observed range of the transmitter (in JJY40 mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary)
 
 RF transmission has priority: scanning and connections stop, the BLE host/controller shut down, and the carrier starts only after shutdown is confirmed. Bluetooth stays off for the whole RF session, including reduced/zero-carrier envelope slots.
 
+![RadioClock V4 dashboard preview](ui/v4_dashboard.png)
+
+Dashboard preview with sample status data.
+
 ## Features
 
+- V4 dashboard based on the supplied UI mockup: dark sidebar, skyline clock banner, five live status tiles, transmission controls, schedules, Casio watch card and shortcuts. The layout adapts to phones and includes a saved light/dark theme.
 - LF carrier generation with ESP32 LEDC and a hardware timer; envelope timing follows the system clock.
 - Scheduled or continuous transmission, overlapping-schedule rotation, timezone selection, and a configurable transmission offset.
 - NTP synchronization, adaptive resynchronization, clock-confidence checks, and holdover handling.
@@ -47,7 +52,7 @@ The tested target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash
 
 For Arduino IDE, install those board/library versions and open:
 
-`firmware/RadioClock_V3_5_Casio_BLE_Reliability/RadioClock_V3_5_Casio_BLE_Reliability.ino`
+`firmware/RadioClock_V4_0_Casio_BLE_Reliability/RadioClock_V4_0_Casio_BLE_Reliability.ino`
 
 Keep `RadioBleArbiter.h`, `CasioBxProtocol.h`, and `partitions.csv` beside the sketch. Select a compatible classic ESP32 board and 4 MB flash. The included large-app layout has one application slot; it does not support dual-slot OTA updates.
 
@@ -62,7 +67,7 @@ bash scripts/test.sh
 
 The installer keeps the pinned tools and packages in `/workspace/.radioclock-tools`, checks the official CLI checksum, and retains Arduino package signature/checksum and TLS verification. It uses injected proxy configuration when present. A later task can reuse the installed snapshot. Cloud tasks already have isolated checkouts; use this checkout without creating a Git worktree.
 
-Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V3_5_Casio_BLE_Reliability`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
+Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_0_Casio_BLE_Reliability`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
 
 ## Watch controls
 
@@ -86,7 +91,15 @@ The Watch card's **Bluetooth time zone** and **Bluetooth time offset** apply onl
 
 ## Editable UI and validation
 
-The live source is `ui/radioclock.html`. After editing it, regenerate the embedded gzip asset and run checks:
+The live source is `ui/radioclock.html`.
+
+V4.0 is a UI-only release. Firmware logic, radio timing/output, Bluetooth protocols, scheduling, time calculations, configuration format and API handlers are identical to V3.5. The firmware changes are its V4.0 version label, sketch filename and generated web-page asset.
+
+The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and a skyline illustration without external fonts, images or scripts. Its controls call the existing APIs; schedule fields reflect the existing daily start/end model. JJY/LF and Bluetooth time remain separately visible. The sidebar's Schedules and Network items jump to their existing controls; the phone layout uses a compact bottom navigation bar.
+
+[Download the V4.0 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.0.zip).
+
+After editing the UI, regenerate its embedded gzip asset and run checks:
 
 ```bash
 python3 scripts/embed-ui.py
@@ -96,11 +109,11 @@ bash scripts/compile.sh
 
 The checks run the actual UI script against mocked APIs, compile extracted firmware functions against host mocks, stress the real atomic RF/BLE arbiter concurrently, and verify gzip, DOM references, API routes, versions, and partition bounds. They exercise state transitions and failures; they do not emulate the ESP32 radio or prove the watch display changed.
 
-See `docs/V3.5-review.md` for the current build evidence and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
+See `docs/V4.0-review.md` for the current release checks. `docs/V3.5-review.md` records the inherited firmware checks and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
 
 ## Build status
 
-V3.5 compiles with the pinned toolchain: **1,379,272 bytes of flash (43% of the 3 MB app partition)** and **61,672 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, packet framing, and concurrent ownership host tests pass. Actual watch time delivery, disconnect behavior, and RF waveform timing still require physical hardware acceptance.
+V4.0 compiles with the pinned toolchain: **1,385,624 bytes of flash (44% of the 3 MB app partition)** and **61,672 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, packet framing, and concurrent ownership host tests pass. Desktop and mobile dashboard checks pass with mocked APIs. Physical watch and RF acceptance remains as documented for V3.5.
 
 ## Credits and provenance
 
@@ -110,7 +123,7 @@ The supplied RadioClock source retains these original credits:
 - **5Breeze** — [ClockWaveXmitter](https://github.com/5Breeze/ClockWaveXmitter) improvements, copyright **2025**; the source identifies web UI, Wi-Fi configuration, multi-station scheduling, and station rotation additions. Its README also credits nisejjy and requests source credit for redistribution, adaptation, or commercial use.
 - **RadioClock V2.7 through V3.2.2** — the supplied firmware lineage and baseline used for this project's V3.5 continuation. The V3.2.1 source is preserved in `baseline/` for comparison.
 
-Those copyright notices remain in the firmware headers. V3.5 carries forward the BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration, UI controls, build tooling, and regression checks from the inherited code.
+Those copyright notices remain in the firmware headers. V4.0 preserves the V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration, build tooling, and regression checks, and updates the dashboard presentation.
 
 The project also uses these libraries and platforms:
 
