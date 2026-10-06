@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_0_Casio_BLE_Reliability/RadioClock_V4_0_Casio_BLE_Reliability.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_1_Casio_BLE_Reliability/RadioClock_V4_1_Casio_BLE_Reliability.ino'
 
 
 def balanced_block(source, start):

@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.0', radio_active: false, station: -1,
+  firmware_version: 'V4.1', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,

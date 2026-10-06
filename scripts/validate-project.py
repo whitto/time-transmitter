@@ -8,12 +8,12 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-sketch = root / "firmware/RadioClock_V4_0_Casio_BLE_Reliability"
+sketch = root / "firmware/RadioClock_V4_1_Casio_BLE_Reliability"
 source = (sketch / f"{sketch.name}.ino").read_text()
 html = (root / "ui/radioclock.html").read_text()
 assert f"// {sketch.name}.ino" in source
-assert '#define FIRMWARE_VERSION "V4.0"' in source
-assert "V4.0" in html and "V3.2.2" not in html
+assert '#define FIRMWARE_VERSION "V4.1"' in source
+assert "V4.1" in html and "V3.2.2" not in html
 assert 'id="btTime"' in html and 'id="btTimezone"' in html and 'id="btTimeOffset"' in html
 for required in ('bt_timezone', 'bt_time_offset_minutes', 'bluetoothLocalTime'):
     assert required in source, f"Bluetooth time setting missing: {required}"
@@ -56,4 +56,4 @@ for previous, current in zip(parts, parts[1:]):
 assert max(offset+size for _,_,offset,size in parts) <= 4*1024*1024
 assert any(kind == "app" and size == 3*1024*1024 for _,kind,_,size in parts)
 print(f"PASS: gzip round-trip ({len(compressed):,} bytes), JavaScript syntax, "
-      f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.0 versions, 4 MB partitions")
+      f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.1 versions, 4 MB partitions")
