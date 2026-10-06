@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V3_4_Casio_BLE_Reliability/RadioClock_V3_4_Casio_BLE_Reliability.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V3_5_Casio_BLE_Reliability/RadioClock_V3_5_Casio_BLE_Reliability.ino'
 
 
 def balanced_block(source, start):
@@ -365,6 +365,7 @@ int main(int argc, char**) {
   discover("GW-BX5600", "11:22:33:44:55:66"); assert(!btDiscoveryReady);
   writeResult = true; discover("GW-B5600", "11:22:33:44:55:66"); serviceBluetoothSync();
   assert(!btPairModeActive && !btWindowActive && lastWriteProtocol == BT_PROTOCOL_STANDARD);
+  assert(btLastSyncDate == "2024-01-01 22:00:00");
   assert(btProfileAddress[0] == "11:22:33:44:55:66" && btProfileName[0] == "GW-B5600");
   assert(btProfileProtocol[0] == BT_PROTOCOL_STANDARD && btProfileProtocol[1] == BT_PROTOCOL_BX5600_MIP);
   assert(btProfileDoneToday(0) && !btProfileDoneToday(1));
@@ -401,6 +402,11 @@ int main(int argc, char**) {
   bluetoothLocalTime(fakeEpoch, btLocal); assert(btLocal.tm_hour == 21);
   btTimezoneName = "Australia/Brisbane"; btTimeOffsetMinutes = 60;
   bluetoothLocalTime(fakeEpoch, btLocal); assert(btLocal.tm_hour == 23);
+  // A 12:30 Brisbane Bluetooth slot is 02:30 in the UTC station clock used
+  // by this host harness, so radio-overlap checks must convert the slot too.
+  btTimeOffsetMinutes = 0; schedule_count = 1; schedules[0] = {150, 160};
+  assert(bluetoothTimeSlotConflicts(750));
+  schedule_count = 0;
 
   // RF has priority, with disconnect and physical-controller failures keeping RF off.
   mockQuiescent = false;
@@ -434,14 +440,14 @@ int main(int argc, char**) {
   // listening. A success on one watch never suppresses another with the same
   // protocol; an RF-interrupted automatic slot resumes as automatic.
   stopBluetoothWindow();
-  btSyncEnabled[0] = true; btSyncTimes[0] = 722;
+  btSyncEnabled[0] = true; btSyncTimes[0] = 1322;
   btSyncProfile[0] = 1; btSyncProtocol[0] = BT_PROTOCOL_ANALOGUE;
   serviceBluetoothSync();
   assert(btSyncActiveSlot == 0 && btActiveProfile == 1 && btActiveProtocol == BT_PROTOCOL_ANALOGUE);
   assert(btManualProfile == 0 && btManualProtocol == BT_PROTOCOL_STANDARD);
   writeResult = true; discover("MTG-B1000"); serviceBluetoothSync();
   assert(btProfileDoneToday(1)); serviceBluetoothSync(); assert(btPersistentWaitActive);
-  btSyncEnabled[0] = false; btSyncEnabled[1] = true; btSyncTimes[1] = 722;
+  btSyncEnabled[0] = false; btSyncEnabled[1] = true; btSyncTimes[1] = 1322;
   btSyncProfile[1] = 2; btSyncProtocol[1] = BT_PROTOCOL_STANDARD;
   serviceBluetoothSync();
   assert(btSyncActiveSlot == 1 && btActiveProfile == 2 && !btProfileDoneToday(2));

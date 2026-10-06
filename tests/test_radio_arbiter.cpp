@@ -1,4 +1,4 @@
-#include "../firmware/RadioClock_V3_4_Casio_BLE_Reliability/RadioBleArbiter.h"
+#include "../firmware/RadioClock_V3_5_Casio_BLE_Reliability/RadioBleArbiter.h"
 
 #include <atomic>
 #include <condition_variable>
