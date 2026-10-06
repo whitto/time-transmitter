@@ -1,6 +1,6 @@
 # GW-BX5600 SP handshake correction (BX1)
 
-The reported V3.2.2 log reaches characteristic discovery, then fails an SP_DATA
+The reported pre-V3.3 log reaches characteristic discovery, then fails an SP_DATA
 Write Request. Disconnect reason 534 is NimBLE's HCI error base 512 plus 0x16,
 “Connection Terminated By Local Host.” It describes cleanup after failure; the
 old log does not identify the failed step, negotiated MTU, or ATT status.
@@ -62,7 +62,7 @@ continue to protect the RF/BLE ownership handoff.
 
 ## Device check
 
-Startup identifies this build as `firmware V3.2.2 build BX1`. An exchange should
+Startup identifies this build as `firmware V3.3 build BX1`. An exchange should
 show MTU at least 136, response sizes 101/28/133, and SP_DATA write sizes
 35/94/133 before the 11-byte TIME command. Confirm the watch's actual displayed
 time and success indicator. If it fails, retain the complete log from connection

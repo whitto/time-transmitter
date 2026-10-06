@@ -47,7 +47,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0c111d;color:#d0d5dd;
 <body>
 <div class="shell">
 <header class="mast">
- <div class="brand"><div class="logo">RC</div><div><h1>RadioClock</h1><small>Precision time transmitter · <span id="fw">V3.2.2</span></small></div></div>
+ <div class="brand"><div class="logo">RC</div><div><h1>RadioClock</h1><small>Precision time transmitter · <span id="fw">V3.3</span></small></div></div>
  <div class="connection"><span id="liveDot" class="dot"></span><span class="text" id="liveText">Connecting…</span></div>
 </header>
 
@@ -124,7 +124,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0c111d;color:#d0d5dd;
 <section class="view" id="view-advanced">
  <div class="grid">
   <article class="card wide"><div class="cardhead"><div><h2>Diagnostics</h2><p class="sub">Useful when checking RF timing, memory, BLE delivery and clock holdover.</p></div><button class="btn soft" onclick="updateDiagnostics(true)">Refresh</button></div><pre id="diagnostics">Open this page to load diagnostics…</pre></article>
-  <article class="card wide"><div class="advanced-note"><strong>Standards note:</strong> this firmware is a low-power local receiver emulator. V3.1/V3.2.2 intentionally keeps JJY’s ordinary frame through the real transmitter’s :15/:45 call-sign periods, and every radio format follows your selected timezone/offset rather than necessarily reproducing the official station’s civil-time convention.</div></article>
+  <article class="card wide"><div class="advanced-note"><strong>Standards note:</strong> this firmware is a low-power local receiver emulator. V3.1/V3.3 intentionally keeps JJY’s ordinary frame through the real transmitter’s :15/:45 call-sign periods, and every radio format follows your selected timezone/offset rather than necessarily reproducing the official station’s civil-time convention.</div></article>
  </div>
 </section>
 </main>
@@ -181,7 +181,7 @@ async function setBtSlotProtocol(i,v){try{await postConfig({bt_slot:i,bt_slot_pr
 async function setBtSlotProfile(i,v){try{await postConfig({bt_slot:i,bt_slot_profile:v},'Watch profile saved.');await loadConfig()}catch(e){toast(e.message,false);await loadConfig()}}
 async function setBtSlot(i,on){try{await postConfig({bt_slot:i,bt_slot_enabled:on?1:0},on?'Automatic watch sync enabled.':'Automatic watch sync disabled.');await loadConfig()}catch(e){toast(e.message,false);await loadConfig()}}
 function nextScheduleText(){if(!schedules.length||!lastStatus.time)return['—','No schedule configured'];const [hh,mm]=lastStatus.time.split(':').map(Number),now=hh*60+mm;const active=schedules.find(x=>now>=x.start&&now<x.end);if(active){const st=station(active.station);return['Active now',`${mt(active.start)}–${mt(active.end)} · ${st?st.name:'Radio type '+active.station}`]}let best=null;for(const x of schedules){const d=(x.start-now+1440)%1440;if(best===null||d<best.d)best={d,x}}if(!best)return['—',''];const st=station(best.x.station);return[best.d<60?`in ${best.d} min`:`in ${Math.floor(best.d/60)}h ${best.d%60}m`,`${mt(best.x.start)} · ${st?st.name:'Radio type '+best.x.station}`]}
-function renderStatus(d,mergeSettings=true){lastStatus=d;if(mergeSettings)mergeStatusSettings(d);$('liveDot').className='dot good';$('liveText').textContent='Live';$('time').textContent=d.time||'--:--:--';$('date').textContent=`${d.date||''} · ${d.timezone||''}`;$('fw').textContent=d.firmware_version||'V3.2.2';
+function renderStatus(d,mergeSettings=true){lastStatus=d;if(mergeSettings)mergeStatusSettings(d);$('liveDot').className='dot good';$('liveText').textContent='Live';$('time').textContent=d.time||'--:--:--';$('date').textContent=`${d.date||''} · ${d.timezone||''}`;$('fw').textContent=d.firmware_version||'V3.3';
  const clock=d.clock_state||'Unknown',trusted=clock!=='Unsynchronized';$('heroClock').textContent=clock;pill('clockPill',clock,trusted?'good':'bad');
  const rf=!!d.radio_active;$('heroRf').textContent=rf?(d.full_time_tx?'Full-time TX':'Scheduled TX'):'RF off';pill('rfPill',rf?'Transmitting':'Idle',rf?'good':'');pill('liveRfPill',rf?'On':'Off',rf?'good':'');pill('modePill',d.full_time_tx?'Full-time':'Scheduled',d.full_time_tx?'warn':'good');
  $('fullTime').checked=!!d.full_time_tx;$('txTime').textContent=d.tx_time||'—';$('radioTxTime').textContent=d.tx_time||'—';const st=station(d.station);$('txStation').textContent=st?st.name:'RF off';$('radioStationDetail').textContent=st?st.name:'No active radio';$('txEncoding').textContent=st?(st.encoding||''):'—';$('radioEncodingDetail').textContent=st?(st.encoding||''):'—';$('txNote').textContent=rf?(d.tx_next_minute?'Frame represents following minute':'Frame represents current minute'):'No active transmission';$('rfMode').textContent=rf?(d.full_time_tx?'continuous output':'schedule active'):'carrier off';

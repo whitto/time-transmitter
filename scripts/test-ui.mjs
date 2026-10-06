@@ -55,7 +55,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V3.2.2', radio_active: false, station: -1,
+  firmware_version: 'V3.3', radio_active: false, station: -1,
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
 };
 const requests = [];

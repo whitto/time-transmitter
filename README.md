@@ -1,4 +1,4 @@
-# Time Transmitter — RadioClock V3.2.2
+# Time Transmitter — RadioClock V3.3
 
 Time Transmitter is an ESP32 project for synchronizing watches with local LF time signals or Casio Bluetooth time delivery. It combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar),  the observed range of the transmitter (in JJY40 mode) is approximately 3-5 meters.  Which is much more that expected, and heaps for me (your results may vary)
@@ -44,7 +44,7 @@ The tested target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash
 
 For Arduino IDE, install those board/library versions and open:
 
-`firmware/RadioClock_V3_2_2_Casio_BLE_Reliability/RadioClock_V3_2_2_Casio_BLE_Reliability.ino`
+`firmware/RadioClock_V3_3_Casio_BLE_Reliability/RadioClock_V3_3_Casio_BLE_Reliability.ino`
 
 Keep `RadioBleArbiter.h`, `CasioBxProtocol.h`, and `partitions.csv` beside the sketch. Select a compatible classic ESP32 board and 4 MB flash. The included large-app layout has one application slot; it does not support dual-slot OTA updates.
 
@@ -59,7 +59,7 @@ bash scripts/test.sh
 
 The installer keeps the pinned tools and packages in `/workspace/.radioclock-tools`, checks the official CLI checksum, and retains Arduino package signature/checksum and TLS verification. It uses injected proxy configuration when present. A later task can reuse the installed snapshot. Cloud tasks already have isolated checkouts; use this checkout without creating a Git worktree.
 
-Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V3_2_2_Casio_BLE_Reliability`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
+Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V3_3_Casio_BLE_Reliability`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
 
 ## Watch controls
 
@@ -91,11 +91,11 @@ bash scripts/compile.sh
 
 The checks run the actual UI script against mocked APIs, compile extracted firmware functions against host mocks, stress the real atomic RF/BLE arbiter concurrently, and verify gzip, DOM references, API routes, versions, and partition bounds. They exercise state transitions and failures; they do not emulate the ESP32 radio or prove the watch display changed.
 
-See `docs/V3.2.2-review.md` for the current build evidence and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
+See `docs/V3.3-review.md` for the current build evidence and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
 
 ## Build status
 
-V3.2.2 BX1 compiles with the pinned toolchain: **1,376,876 bytes of flash (43% of the 3 MB app partition)** and **61,656 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, packet framing, and concurrent ownership host tests pass. Actual watch time delivery, disconnect behavior, and RF waveform timing still require physical hardware acceptance.
+V3.3 compiles with the pinned toolchain: **1,376,876 bytes of flash (43% of the 3 MB app partition)** and **61,656 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, packet framing, and concurrent ownership host tests pass. Actual watch time delivery, disconnect behavior, and RF waveform timing still require physical hardware acceptance.
 
 ## Credits and provenance
 
@@ -103,9 +103,9 @@ The supplied RadioClock source retains these original credits:
 
 - **taroh (GitHub: tarohs)** — original [nisejjy](https://github.com/tarohs/nisejjy) software-radio code, copyright **2021**.
 - **5Breeze** — [ClockWaveXmitter](https://github.com/5Breeze/ClockWaveXmitter) improvements, copyright **2025**; the source identifies web UI, Wi-Fi configuration, multi-station scheduling, and station rotation additions. Its README also credits nisejjy and requests source credit for redistribution, adaptation, or commercial use.
-- **RadioClock V2.7 through V3.2.1** — the supplied firmware lineage and baseline used for this project's V3.2.2 continuation. The V3.2.1 source is preserved in `baseline/` for comparison.
+- **RadioClock V2.7 through V3.2.2** — the supplied firmware lineage and baseline used for this project's V3.3 continuation. The V3.2.1 source is preserved in `baseline/` for comparison.
 
-Those copyright notices remain in the firmware headers. V3.2.2 adds BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration, UI controls, build tooling, and regression checks to that inherited code.
+Those copyright notices remain in the firmware headers. V3.3 carries forward the BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration, UI controls, build tooling, and regression checks from the inherited code.
 
 The project also uses these libraries and platforms:
 
