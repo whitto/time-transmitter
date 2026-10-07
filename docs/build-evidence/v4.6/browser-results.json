@@ -1,0 +1,534 @@
+[
+  {
+    "label": "desktop",
+    "width": 1536,
+    "height": 1024,
+    "uiSHA256": "6bcfbee342a3d0494a5fb4d64f19b58b2ccdcab09f8ba6372d245f8fc7d98587",
+    "errors": [],
+    "homeGeometry": {
+      "viewport": 1536,
+      "scrollWidth": 1536,
+      "nav": {
+        "left": 0,
+        "top": 92,
+        "right": 278,
+        "bottom": 1024,
+        "width": 278,
+        "height": 932,
+        "direction": "column"
+      },
+      "contentLeft": 300,
+      "bodyClass": "",
+      "outside": [
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1719.8760986328125,
+          "left": 542.796875,
+          "width": 1177.0792236328125
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1719.8760986328125,
+          "left": 542.796875,
+          "width": 1177.0792236328125
+        }
+      ]
+    },
+    "drawerReport": null,
+    "navTest": [
+      {
+        "view": "home",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "radio",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "watch",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "schedules",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "network",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "settings",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "advanced",
+        "scrollWidth": 1536
+      },
+      {
+        "view": "about",
+        "scrollWidth": 1536
+      }
+    ],
+    "syncPostCount": 1
+  },
+  {
+    "label": "laptop",
+    "width": 1024,
+    "height": 900,
+    "uiSHA256": "6bcfbee342a3d0494a5fb4d64f19b58b2ccdcab09f8ba6372d245f8fc7d98587",
+    "errors": [],
+    "homeGeometry": {
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "nav": {
+        "left": 0,
+        "top": 92,
+        "right": 208,
+        "bottom": 900,
+        "width": 208,
+        "height": 808,
+        "direction": "column"
+      },
+      "contentLeft": 230,
+      "bodyClass": "",
+      "outside": [
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 1038.425537109375,
+          "left": 347.94940185546875,
+          "width": 690.4761352539062
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1038.425537109375,
+          "left": 347.94940185546875,
+          "width": 690.4761352539062
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1184.8065185546875,
+          "left": 347.94940185546875,
+          "width": 836.8571166992188
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1184.8065185546875,
+          "left": 347.94940185546875,
+          "width": 836.8571166992188
+        },
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 1038.425537109375,
+          "left": 347.94940185546875,
+          "width": 690.4761352539062
+        }
+      ]
+    },
+    "drawerReport": null,
+    "navTest": [
+      {
+        "view": "home",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "radio",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "watch",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "schedules",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "network",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "settings",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "advanced",
+        "scrollWidth": 1024
+      },
+      {
+        "view": "about",
+        "scrollWidth": 1024
+      }
+    ],
+    "syncPostCount": 1
+  },
+  {
+    "label": "tablet",
+    "width": 820,
+    "height": 1100,
+    "uiSHA256": "6bcfbee342a3d0494a5fb4d64f19b58b2ccdcab09f8ba6372d245f8fc7d98587",
+    "errors": [],
+    "homeGeometry": {
+      "viewport": 820,
+      "scrollWidth": 820,
+      "nav": {
+        "left": 0,
+        "top": 92,
+        "right": 208,
+        "bottom": 1100,
+        "width": 208,
+        "height": 1008,
+        "direction": "column"
+      },
+      "contentLeft": 222,
+      "bodyClass": "",
+      "outside": [
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 894.9524078369141,
+          "left": 133.04762268066406,
+          "width": 761.90478515625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 894.9524078369141,
+          "left": 133.04762268066406,
+          "width": 761.90478515625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1056.4762115478516,
+          "left": 133.04762268066406,
+          "width": 923.4285888671875
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 1056.4762115478516,
+          "left": 133.04762268066406,
+          "width": 923.4285888671875
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 856.8570861816406,
+          "left": 262.5714416503906,
+          "width": 594.28564453125
+        },
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 894.9524078369141,
+          "left": 133.04762268066406,
+          "width": 761.90478515625
+        }
+      ]
+    },
+    "drawerReport": null,
+    "navTest": [
+      {
+        "view": "home",
+        "scrollWidth": 820
+      },
+      {
+        "view": "radio",
+        "scrollWidth": 820
+      },
+      {
+        "view": "watch",
+        "scrollWidth": 820
+      },
+      {
+        "view": "schedules",
+        "scrollWidth": 820
+      },
+      {
+        "view": "network",
+        "scrollWidth": 820
+      },
+      {
+        "view": "settings",
+        "scrollWidth": 820
+      },
+      {
+        "view": "advanced",
+        "scrollWidth": 820
+      },
+      {
+        "view": "about",
+        "scrollWidth": 820
+      }
+    ],
+    "syncPostCount": 1
+  },
+  {
+    "label": "phone",
+    "width": 390,
+    "height": 844,
+    "uiSHA256": "6bcfbee342a3d0494a5fb4d64f19b58b2ccdcab09f8ba6372d245f8fc7d98587",
+    "errors": [],
+    "homeGeometry": {
+      "viewport": 390,
+      "scrollWidth": 390,
+      "nav": {
+        "left": 0,
+        "top": 92,
+        "right": 164,
+        "bottom": 844,
+        "width": 164,
+        "height": 752,
+        "direction": "column"
+      },
+      "contentLeft": 174,
+      "bodyClass": "",
+      "outside": [
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 557.9524078369141,
+          "left": -3.9523773193359375,
+          "width": 561.90478515625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 557.9524078369141,
+          "left": -3.9523773193359375,
+          "width": 561.90478515625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 677.0761871337891,
+          "left": -3.9523773193359375,
+          "width": 681.028564453125
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 677.0761871337891,
+          "left": -3.9523773193359375,
+          "width": 681.028564453125
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 429.83807373046875,
+          "left": 420.28570556640625,
+          "width": 9.5523681640625
+        },
+        {
+          "tag": "circle",
+          "id": "",
+          "class": "SVG",
+          "right": 425.6238098144531,
+          "left": 423.9381103515625,
+          "width": 1.685699462890625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 529.8571929931641,
+          "left": 91.57142639160156,
+          "width": 438.2857666015625
+        },
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 557.9524078369141,
+          "left": -3.9523773193359375,
+          "width": 561.90478515625
+        }
+      ]
+    },
+    "drawerReport": null,
+    "navTest": [
+      {
+        "view": "home",
+        "scrollWidth": 390
+      },
+      {
+        "view": "radio",
+        "scrollWidth": 390
+      },
+      {
+        "view": "watch",
+        "scrollWidth": 390
+      },
+      {
+        "view": "schedules",
+        "scrollWidth": 390
+      },
+      {
+        "view": "network",
+        "scrollWidth": 390
+      },
+      {
+        "view": "settings",
+        "scrollWidth": 390
+      },
+      {
+        "view": "advanced",
+        "scrollWidth": 390
+      },
+      {
+        "view": "about",
+        "scrollWidth": 390
+      }
+    ],
+    "syncPostCount": 1
+  },
+  {
+    "label": "narrow",
+    "width": 320,
+    "height": 844,
+    "uiSHA256": "6bcfbee342a3d0494a5fb4d64f19b58b2ccdcab09f8ba6372d245f8fc7d98587",
+    "errors": [],
+    "homeGeometry": {
+      "viewport": 320,
+      "scrollWidth": 320,
+      "nav": {
+        "left": 0,
+        "top": 92,
+        "right": 164,
+        "bottom": 844,
+        "width": 164,
+        "height": 752,
+        "direction": "column"
+      },
+      "contentLeft": 174,
+      "bodyClass": "",
+      "outside": [
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 522.9524078369141,
+          "left": -38.95237731933594,
+          "width": 561.90478515625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 522.9524078369141,
+          "left": -38.95237731933594,
+          "width": 561.90478515625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 642.0761871337891,
+          "left": -38.95237731933594,
+          "width": 681.028564453125
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 642.0761871337891,
+          "left": -38.95237731933594,
+          "width": 681.028564453125
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 394.83807373046875,
+          "left": 385.28570556640625,
+          "width": 9.5523681640625
+        },
+        {
+          "tag": "circle",
+          "id": "",
+          "class": "SVG",
+          "right": 390.6238098144531,
+          "left": 388.9381103515625,
+          "width": 1.685699462890625
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "class": "SVG",
+          "right": 494.8571319580078,
+          "left": 56.57142639160156,
+          "width": 438.28570556640625
+        },
+        {
+          "tag": "rect",
+          "id": "",
+          "class": "SVG",
+          "right": 522.9524078369141,
+          "left": -38.95237731933594,
+          "width": 561.90478515625
+        }
+      ]
+    },
+    "drawerReport": null,
+    "navTest": [
+      {
+        "view": "home",
+        "scrollWidth": 320
+      },
+      {
+        "view": "radio",
+        "scrollWidth": 320
+      },
+      {
+        "view": "watch",
+        "scrollWidth": 320
+      },
+      {
+        "view": "schedules",
+        "scrollWidth": 320
+      },
+      {
+        "view": "network",
+        "scrollWidth": 320
+      },
+      {
+        "view": "settings",
+        "scrollWidth": 320
+      },
+      {
+        "view": "advanced",
+        "scrollWidth": 320
+      },
+      {
+        "view": "about",
+        "scrollWidth": 320
+      }
+    ],
+    "syncPostCount": 1
+  }
+]

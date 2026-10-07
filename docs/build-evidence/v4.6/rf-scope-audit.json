@@ -1,0 +1,33 @@
+{
+  "baseline": "2928d21 (V4.5)",
+  "functions_unchanged": {
+    "onTimer": true,
+    "radioTask": true,
+    "starttimer": true,
+    "stoptimer": true,
+    "ampchange": true,
+    "setstation": true,
+    "silenceRfCarrier": true,
+    "stationTime": true,
+    "clearTxFrame": true,
+    "buildJjyEnvelope": true,
+    "buildWwvbEnvelope": true,
+    "encodeCommon": true,
+    "mb_jjy": true,
+    "mb_wwvb": true,
+    "mb_dcf": true,
+    "mb_msf": true,
+    "mb_bsf": true,
+    "shutdownBluetoothForRadio": true,
+    "performCasioStandardTimeSync": true,
+    "BX5600_time_flow_unchanged_except_post_time_font_call": true
+  },
+  "carrier_constants_unchanged": true,
+  "files_unchanged": {
+    "RadioBleArbiter.h": true,
+    "CasioBxProtocol.h": true,
+    "partitions.csv": true
+  },
+  "sketch_sha256": "a6bdf0ea71acba2770c84f8542ba0de5f607ed6fadf752a58ea87605803ff97b",
+  "ui_sha256": "6bcfbee342a3d0494a5fb4d64f19b58b2ccdcab09f8ba6372d245f8fc7d98587"
+}

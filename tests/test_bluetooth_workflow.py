@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_5/RadioClock_V4_5.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_6/RadioClock_V4_6.ino'
 
 
 def balanced_block(source, start):
@@ -236,6 +236,7 @@ int full_time_station = SN_JJY_E, transmission_offset_minutes = 0, wifiPowerMode
 constexpr const char *DEFAULT_BT_TIMEZONE = "Australia/Brisbane";
 String btTimezoneName(DEFAULT_BT_TIMEZONE);
 int btTimeOffsetMinutes = 0;
+std::atomic<bool> activityLedEnabled{true};
 bool configDirty = false;
 unsigned long configDirtyBecause = 0;
 static bool validTimezoneName(const String&) { return true; }
@@ -269,6 +270,11 @@ bool performCasioStandardTimeSync(int p) {
   return writeResult;
 }
 void initBluetoothSync();
+static bool bluetoothControllerNeeded();
+static bool shutdownIdleBluetooth();
+static int btMinutesOfDay(const struct tm &);
+static bool btMinuteInBluetoothWindow(int, int);
+static void btSlotOccurrenceDate(int, const struct tm &, int &, int &);
 void serviceBluetoothSync();
 void resetBluetoothDayIfNeeded();
 void stopBluetoothWindow();
@@ -295,6 +301,7 @@ static void manualRetry() {
 int main(int argc, char** argv) {
   setenv("TZ", "UTC0", 1); tzset();
   std::fill(std::begin(btSyncEnabled), std::end(btSyncEnabled), false);
+  btAlwaysWaitEnabled = false;
   if (argc > 1 && std::strcmp(argv[1], "midnight") == 0) {
     bind(); initBluetoothSync(); btSyncEnabled[0] = true; btSyncTimes[0] = 0;
     fakeEpoch = 1735653480; // Brisbane 2024-12-31 23:58: New Year's target is 2025-01-01.
@@ -611,6 +618,7 @@ class BluetoothWorkflowTest(unittest.TestCase):
         names = ['btWatchNameMatches', 'clearBtDiscovery', 'consumeBtDiscovery',
                  'cancelBtResponse', 'radioScheduleActiveNow', 'bluetoothActivityPresent',
                  'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
+                 'bluetoothControllerNeeded', 'shutdownIdleBluetooth',
                  'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'attemptBluetoothSync', 'serviceBluetoothSync',
                  'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
@@ -622,9 +630,12 @@ class BluetoothWorkflowTest(unittest.TestCase):
         protocol_branch = balanced_block(source, source.index('if (server.hasArg("bt_manual_protocol"))'))
         profile_branch = balanced_block(source, source.index('if (server.hasArg("bt_manual_profile"))'))
         slot_branch = balanced_block(source, source.index('if (server.hasArg("bt_slot"))'))
+        led_branch = balanced_block(source, source.index('if (server.hasArg("activity_led_enabled"))'))
+        font_branch = balanced_block(source, source.index('if (server.hasArg("bt_font_profile") ||'))
+        power_branch = balanced_block(source, source.index('if (server.hasArg("bt_idle_power_save"))'))
         routes = ('void registerRoutes() {\n' + routes +
                   '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + protocol_branch + '\n});' +
-                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + protocol_branch + profile_branch + slot_branch + '\n});\n}')
+                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
         # Forward declaration precedes initBluetoothSync, which creates this callback class.
         functions = functions.replace('void initBluetoothSync(void) {', scan + '\n\nvoid initBluetoothSync(void) {', 1)
         return '\n'.join([MOCKS, source[globals_start:globals_end], HELPERS, functions, routes, DRIVER])

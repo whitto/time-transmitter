@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.5', radio_active: false, station: -1,
+  firmware_version: 'V4.6', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -67,6 +67,8 @@ let releaseStatus;
 let deferNextStatus = false;
 let releaseConfig;
 let deferNextConfig = false;
+let releaseSetting;
+let deferNextSetting = false;
 class FormData {
   constructor() { this.fields = []; }
   append(key, value) { this.fields.push([key, value]); }
@@ -78,16 +80,22 @@ const fetch = async (url, options = {}) => {
   const fields = options.body instanceof FormData ? Object.fromEntries(options.body.entries()) : {};
   requests.push({ url, method, fields });
   if (method === 'POST' && ['/api/config', '/api/settings'].includes(url)) {
+    if (deferNextSetting) {
+      deferNextSetting = false;
+      await new Promise(resolve => { releaseSetting = resolve; });
+    }
     if (failNextSettings) {
       failNextSettings = false;
-      return response({ status: 'error', message: 'Rejected setting' }, 409);
+      const led = Object.hasOwn(fields, 'activity_led_enabled');
+      return response({ status: 'error', message: led ? 'LED setting could not be saved' : 'Rejected setting' }, led ? 500 : 409);
     }
     for (const [key, value] of Object.entries(fields)) {
-      if (key === 'bt_always_wait') state[key] = value === '1';
+      if (['bt_always_wait', 'activity_led_enabled', 'bt_idle_power_save'].includes(key)) state[key] = value === '1';
       else if (['wifi_power_mode', 'bt_manual_profile', 'bt_manual_protocol'].includes(key)) state[key] = Number(value);
       else if (key === 'bt_time_offset_minutes') state[key] = Number(value);
       else if (key === 'bt_timezone') state[key] = value;
     }
+    if (Object.hasOwn(fields, 'bt_font_profile')) state.bt_profiles.find(p=>Number(p.id)===Number(fields.bt_font_profile)).font_mode=Number(fields.bt_font_mode);
     if (Object.hasOwn(fields, 'bt_slot')) {
       const slot = state.bt_times[Number(fields.bt_slot)];
       if (Object.hasOwn(fields, 'bt_slot_enabled')) slot.enabled = fields.bt_slot_enabled === '1';
@@ -142,7 +150,9 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.5');
+assert.equal(element('fw').textContent, 'V4.6');
+assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
+assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
 assert.match(element('watchStatus').textContent, /delivered.*saved/);
 status.bt_last_sync_status = 'Last time write delivered (saved; watch unverified)';
@@ -204,6 +214,16 @@ failNextSettings = true;
 await evaluate('setBtAlwaysWait(true)');
 assert.equal(element('btAlwaysWait').checked, false, 'rejected Always Wait change must restore saved state');
 assert.equal(element('btAlwaysWait').disabled, false);
+delete state.bt_always_wait;
+state.bt_times = [390, 750, 1110, 1380].map(minute => ({ minute, enabled: true, protocol: 0, profile: 0 }));
+await evaluate('loadConfig()');
+assert.equal(element('btAlwaysWait').checked, true, 'missing Always Wait preference defaults to On');
+assert.equal((element('btScheduleList').innerHTML.match(/type="checkbox"\s+checked/g) || []).length, 4, 'all four default-enabled slots must reflect the device configuration');
+await evaluate('setBtAlwaysWait(false)');
+await evaluate('setBtSlot(1,false)');
+await evaluate('loadConfig()');
+assert.equal(element('btAlwaysWait').checked, false, 'explicit saved Always Wait Off must be preserved');
+assert.equal((element('btScheduleList').innerHTML.match(/type="checkbox"\s+checked/g) || []).length, 3, 'explicit saved slot Off must be preserved');
 
 await evaluate('setWifiPowerMode(0)');
 assert.deepEqual(requests.at(-1), { url: '/api/config', method: 'POST', fields: { wifi_power_mode: '0' } });
@@ -226,6 +246,51 @@ const staleTick = evaluate('tick()');
 await evaluate('setBtAlwaysWait(true)');
 releaseStatus(); await staleTick;
 assert.equal(element('btAlwaysWait').checked, true, 'stale polling response must not revert a successful save');
+
+// The LED switch persists immediately, ignores stale reads, and rolls back on flash errors.
+deferNextStatus = true;
+const staleLedTick = evaluate('tick()');
+deferNextSetting = true;
+const saveLedOff = evaluate('setActivityLed(false)');
+assert.equal(element('activityLedEnabled').checked, false);
+assert.equal(element('activityLedEnabled').disabled, true);
+assert.equal(element('activityLedStatus').textContent, 'Saving…');
+evaluate('renderStatus({...lastStatus, activity_led_enabled:true})');
+assert.equal(element('activityLedEnabled').checked, false, 'polling during an LED write must preserve the user choice');
+assert.equal(element('activityLedStatus').textContent, 'Saving…');
+const beforeDuplicateLed = requests.length;
+await evaluate('setActivityLed(true)');
+assert.equal(requests.length, beforeDuplicateLed, 'pending LED writes must not accept another toggle');
+releaseSetting(); await saveLedOff;
+assert.deepEqual(requests.findLast(r => r.method === 'POST'), { url: '/api/config', method: 'POST', fields: { activity_led_enabled: '0' } });
+assert.equal(state.activity_led_enabled, false);
+assert.equal(element('activityLedEnabled').disabled, false);
+assert.equal(element('activityLedStatus').textContent, 'Off');
+releaseStatus(); await staleLedTick;
+assert.equal(element('activityLedEnabled').checked, false, 'a stale status read must not revert a saved LED preference');
+await evaluate('loadConfig()');
+assert.equal(element('activityLedEnabled').checked, false, 'saved LED Off must survive configuration reload');
+
+deferNextConfig = true;
+const staleLedConfig = evaluate('loadConfig()');
+await evaluate('setActivityLed(true)');
+releaseConfig(); await staleLedConfig;
+assert.equal(state.activity_led_enabled, true);
+assert.equal(element('activityLedEnabled').checked, true, 'a stale config read must not revert a later LED save');
+assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
+await evaluate('loadConfig()');
+assert.equal(element('activityLedEnabled').checked, true, 'saved LED On must survive configuration reload');
+
+failNextSettings = true;
+await evaluate('setActivityLed(false)');
+assert.equal(state.activity_led_enabled, true);
+assert.equal(element('activityLedEnabled').checked, true, 'failed LED storage write must restore the saved preference');
+assert.equal(element('activityLedEnabled').disabled, false);
+assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
+assert.equal(element('toast').textContent, 'LED setting could not be saved');
+state.activity_led_enabled = false;
+await evaluate('tick()');
+assert.equal(element('activityLedEnabled').checked, false, 'authoritative current status must reflect LED settings made by another browser');
 
 // Bluetooth slots need the same stale-response protection as other settings.
 state.bt_times = [{ minute: 30, enabled: false, protocol: 0, profile: 0, done_today: true }];
@@ -296,4 +361,38 @@ assert.equal(element('btManualProfile').value, '1');
 assert.equal(element('btPairProfile').value, '1');
 assert.equal(element('btListenPill').textContent, 'Waiting for watch');
 assert.equal(element('btAlwaysWaitStatus').textContent, 'Always Wait: enabled');
-console.log('UI handler tests passed: settings, rollback, stale polling/config, automatic slot toggles, watch text safety, separate sync/pair routes, RF state, replacement binding, saved delivery and later failures.');
+// Font overrides follow the selected profile, preserve opt-out and reject stale reads.
+state.bt_manual_profile=0;state.bt_manual_protocol=0;state.bt_profiles[0].font_mode=0;
+await evaluate('loadConfig()');
+assert.equal(element('btFontEnabled').checked,false);
+assert.equal(element('btFontChoice').disabled,true);
+element('btFontEnabled').checked=true;element('btFontChoice').value='1';
+await evaluate('setWatchFont()');
+assert.equal(state.bt_profiles[0].font_mode,1);
+assert.equal(state.bt_profiles[1].font_mode??0,0);
+deferNextStatus=true;const staleFont=evaluate('tick()');
+element('btFontChoice').value='2';await evaluate('setWatchFont()');
+releaseStatus();await staleFont;
+assert.equal(evaluate('selectedFontMode()'),2);
+assert.equal(element('btFontChoice').value,'2');
+failNextSettings=true;element('btFontEnabled').checked=false;await evaluate('setWatchFont()');
+assert.equal(element('btFontEnabled').checked,true);
+assert.equal(evaluate('selectedFontMode()'),2);
+await evaluate('loadConfig()');assert.equal(element('btFontChoice').value,'2');
+element('btFontEnabled').checked=false;await evaluate('setWatchFont()');
+assert.equal(state.bt_profiles[0].font_mode,0);
+state.bt_manual_profile=1;state.bt_manual_protocol=1;await evaluate('loadConfig()');
+assert.equal(element('btFontEnabled').disabled,true,'unsupported protocols cannot select a font');
+// Power preference persists and Always Wait explicitly suspends controller savings.
+state.bt_always_wait=false;await evaluate('loadConfig()');
+await evaluate('setBtIdlePowerSave(true)');assert.equal(state.bt_idle_power_save,true);
+assert.equal(element('btPowerStatus').textContent,'On');
+deferNextConfig=true;const stalePower=evaluate('loadConfig()');
+await evaluate('setBtIdlePowerSave(false)');releaseConfig();await stalePower;
+assert.equal(element('btIdlePowerSave').checked,false);
+await evaluate('setBtIdlePowerSave(true)');
+failNextSettings=true;await evaluate('setBtIdlePowerSave(false)');
+assert.equal(element('btIdlePowerSave').checked,true);
+await evaluate('setBtAlwaysWait(true)');assert.equal(element('btPowerStatus').textContent,'Paused by Always Wait');
+await evaluate('loadConfig()');assert.equal(element('btIdlePowerSave').checked,true);
+console.log('UI handler tests passed: font profile selection/persistence/rollback/stale reads, idle BT power saving, LED, schedules and existing sync/pair behavior.');

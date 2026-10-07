@@ -29,13 +29,17 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.5', station: -1, radio_active: false,
+    firmware_version: 'V4.6', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     bt_day_complete: true, bt_pairing: false,
   };
   let holdNextStatus = false, statusHeld, releaseStatus;
   let holdNextSlotWrite = false, slotWriteHeld, releaseSlotWrite;
   let rejectNextSlotWrite = false;
+  let holdNextLedWrite = false, ledWriteHeld, releaseLedWrite;
+  let rejectNextLedWrite = false;
+  let rejectNextWatchOption = false;
+  let holdNextConfig = false, configHeld, releaseConfig;
   try {
     browser = await chromium.launch({
       executablePath: process.env.RADIOCLOCK_CHROMIUM || '/usr/bin/chromium',
@@ -54,21 +58,53 @@ const { chromium } = require('playwright');
       else if (url === '/api/config') {
         if (req.method() === 'POST') {
           const fields = Object.fromEntries([...(req.postData() || '').matchAll(/name="([^"]+)"\r\n\r\n([^\r\n]*)/g)].map(x => [x[1], x[2]]));
-          assert.ok(Object.hasOwn(fields, 'bt_slot'), 'browser check only expects slot config writes');
-          if (holdNextSlotWrite) {
-            holdNextSlotWrite = false;
-            slotWriteHeld();
-            await new Promise(resolve => { releaseSlotWrite = resolve; });
-          }
-          if (rejectNextSlotWrite) {
-            rejectNextSlotWrite = false; code = 409;
-            data = { status: 'error', message: 'Slot rejected by device' };
+          if (Object.hasOwn(fields, 'bt_font_profile') || Object.hasOwn(fields, 'bt_idle_power_save')) {
+            if (rejectNextWatchOption) {
+              rejectNextWatchOption = false; code = 500;
+              data = { status: 'error', message: 'Watch option could not be saved' };
+            } else {
+              if (Object.hasOwn(fields, 'bt_font_profile')) config.bt_profiles.find(p=>Number(p.id)===Number(fields.bt_font_profile)).font_mode=Number(fields.bt_font_mode);
+              else config.bt_idle_power_save=fields.bt_idle_power_save==='1';
+              data={status:'ok'};
+            }
+          } else if (Object.hasOwn(fields, 'activity_led_enabled')) {
+            assert.deepEqual(Object.keys(fields), ['activity_led_enabled']);
+            if (holdNextLedWrite) {
+              holdNextLedWrite = false;
+              ledWriteHeld();
+              await new Promise(resolve => { releaseLedWrite = resolve; });
+            }
+            if (rejectNextLedWrite) {
+              rejectNextLedWrite = false; code = 500;
+              data = { status: 'error', message: 'LED setting could not be saved' };
+            } else {
+              config.activity_led_enabled = fields.activity_led_enabled === '1';
+              data = { status: 'ok' };
+            }
           } else {
-            const slot = config.bt_times[Number(fields.bt_slot)];
-            if (Object.hasOwn(fields, 'bt_slot_enabled')) slot.enabled = fields.bt_slot_enabled === '1';
-            data = { status: 'ok' };
+            assert.ok(Object.hasOwn(fields, 'bt_slot'), 'browser check expects slot or LED config writes');
+            if (holdNextSlotWrite) {
+              holdNextSlotWrite = false;
+              slotWriteHeld();
+              await new Promise(resolve => { releaseSlotWrite = resolve; });
+            }
+            if (rejectNextSlotWrite) {
+              rejectNextSlotWrite = false; code = 409;
+              data = { status: 'error', message: 'Slot rejected by device' };
+            } else {
+              const slot = config.bt_times[Number(fields.bt_slot)];
+              if (Object.hasOwn(fields, 'bt_slot_enabled')) slot.enabled = fields.bt_slot_enabled === '1';
+              data = { status: 'ok' };
+            }
           }
-        } else data = structuredClone(config);
+        } else {
+          data = structuredClone(config);
+          if (holdNextConfig) {
+            holdNextConfig = false;
+            configHeld();
+            await new Promise(resolve => { releaseConfig = resolve; });
+          }
+        }
       }
       else if (url === '/api/schedules') {
         if (req.method() === 'POST') {
@@ -84,17 +120,24 @@ const { chromium } = require('playwright');
           await new Promise(resolve => { releaseStatus = resolve; });
         }
       }
+      else if (url === '/api/settings' && req.method() === 'POST') {
+        const fields = Object.fromEntries([...(req.postData() || '').matchAll(/name="([^"]+)"\r\n\r\n([^\r\n]*)/g)].map(x => [x[1], x[2]]));
+        assert.deepEqual(Object.keys(fields), ['bt_always_wait']);
+        config.bt_always_wait = fields.bt_always_wait === '1';
+        data = { status: 'ok' };
+      }
       else if (url === '/api/bluetooth-pair') data = { message: 'Pairing window opened' };
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.5');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.6');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
-      const save = window.saveSchedules, pair = window.pairWatch;
+      const save = window.saveSchedules, pair = window.pairWatch, led = window.setActivityLed;
       window.saveSchedules = (...args) => (window.lastScheduleSave = save(...args));
       window.pairWatch = (...args) => (window.lastPairWatch = pair(...args));
+      window.setActivityLed = (...args) => (window.lastLedSave = led(...args));
     });
     const clickSaveSchedules = async () => {
       await page.getByRole('button', { name: 'Save Schedules', exact: true }).click();
@@ -172,9 +215,10 @@ const { chromium } = require('playwright');
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#btScheduleList input[type="checkbox"]')?.checked === true);
     await page.evaluate(() => {
-      const save = window.saveSchedules, pair = window.pairWatch;
+      const save = window.saveSchedules, pair = window.pairWatch, led = window.setActivityLed;
       window.saveSchedules = (...args) => (window.lastScheduleSave = save(...args));
       window.pairWatch = (...args) => (window.lastPairWatch = pair(...args));
+      window.setActivityLed = (...args) => (window.lastLedSave = led(...args));
     });
     assert.equal(await automaticToggle.isChecked(), true, 'saved automatic toggle must survive reloading');
 
@@ -182,7 +226,7 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => btSlotSaving < 0);
     rejectNextSlotWrite = true;
     await automaticToggle.focus();
-    await automaticToggle.check();
+    await automaticToggle.click();
     await page.waitForFunction(() => btSlotSaving < 0);
     assert.equal(await automaticToggle.isChecked(), false, 'rejected focused checkbox must revert immediately');
     assert.equal(await automaticToggle.isDisabled(), false);
@@ -208,8 +252,146 @@ const { chromium } = require('playwright');
     assert.ok(!requests.some(x => (x.body || '').includes('bt_rebind_profile')));
     assert.equal(await page.locator('#pairedWatchName').textContent(), binding.name);
     assert.equal(await page.locator('#pairedWatchAddress').textContent(), binding.address);
+
+    // The physical activity-LED preference saves without a separate button.
+    await page.evaluate(() => showView('settings'));
+    const activityLed = page.getByRole('checkbox', { name: 'Flash blue ESP32 LED on activity', exact: true });
+    assert.equal(await activityLed.isChecked(), true, 'legacy configuration defaults to activity flashing');
+    assert.match(await page.locator('#activity-led-settings').textContent(), /survives power restarts/);
+    assert.match(await page.locator('#activity-led-settings').textContent(), /Idle listening and Wi-Fi alone leave it off/);
+    holdNextStatus = true;
+    const oldLedStatusCaptured = new Promise(resolve => { statusHeld = resolve; });
+    await page.evaluate(() => { window.oldLedStatus = tick(); });
+    await oldLedStatusCaptured;
+    holdNextLedWrite = true;
+    const ledWriteStarted = new Promise(resolve => { ledWriteHeld = resolve; });
+    await activityLed.uncheck();
+    await ledWriteStarted;
+    assert.equal(await activityLed.isChecked(), false);
+    assert.equal(await activityLed.isDisabled(), true, 'pending LED storage write disables repeat clicks');
+    assert.equal(await page.locator('#activityLedStatus').textContent(), 'Saving…');
+    await page.evaluate(async () => renderStatus(await api('/api/status')));
+    await page.evaluate(async () => loadConfig());
+    assert.equal(await activityLed.isChecked(), false, 'status and config reads during save keep the visible LED choice');
+    assert.equal(await page.locator('#activityLedStatus').textContent(), 'Saving…');
+    assert.equal(config.activity_led_enabled, undefined, 'pending write must not yet appear persisted');
+    releaseLedWrite();
+    await page.evaluate(async () => await window.lastLedSave);
+    assert.equal(config.activity_led_enabled, false);
+    assert.equal(await activityLed.isDisabled(), false);
+    assert.equal(await page.locator('#activityLedStatus').textContent(), 'Off');
+    assert.equal(await page.locator('#toast').textContent(), 'Blue ESP32 LED turned off and saved.');
+    releaseStatus();
+    await page.evaluate(async () => await window.oldLedStatus);
+    assert.equal(await activityLed.isChecked(), false, 'late pre-save status cannot undo a saved LED preference');
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('activityLedStatus').textContent === 'Off');
+    assert.equal(await activityLed.isChecked(), false, 'LED Off survives a page reload from saved config');
+    await page.evaluate(() => {
+      const led = window.setActivityLed;
+      window.setActivityLed = (...args) => (window.lastLedSave = led(...args));
+    });
+    holdNextConfig = true;
+    const oldLedConfigCaptured = new Promise(resolve => { configHeld = resolve; });
+    await page.evaluate(() => { window.oldLedConfig = loadConfig(); });
+    await oldLedConfigCaptured;
+    await activityLed.check();
+    await page.evaluate(async () => await window.lastLedSave);
+    releaseConfig();
+    await page.evaluate(async () => await window.oldLedConfig);
+    assert.equal(config.activity_led_enabled, true);
+    assert.equal(await activityLed.isChecked(), true, 'late pre-save config cannot undo a saved LED preference');
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('activityLedStatus').textContent === 'Flash on activity');
+    assert.equal(await activityLed.isChecked(), true, 'LED On survives a page reload from saved config');
+    await page.evaluate(() => {
+      const led = window.setActivityLed;
+      window.setActivityLed = (...args) => (window.lastLedSave = led(...args));
+    });
+    rejectNextLedWrite = true;
+    await activityLed.focus();
+    await activityLed.click();
+    await page.evaluate(async () => await window.lastLedSave);
+    assert.equal(await activityLed.isChecked(), true, 'failed storage write restores a focused LED checkbox immediately');
+    assert.equal(await activityLed.isDisabled(), false);
+    assert.equal(config.activity_led_enabled, true);
+    assert.equal(await page.locator('#activityLedStatus').textContent(), 'Flash on activity');
+    assert.equal(await page.locator('#toast').textContent(), 'LED setting could not be saved');
+
+    // Font is a per-watch opt-in; saved selections survive reload and errors.
+    await page.evaluate(() => showView('watch'));
+    const fontToggle=page.locator('#btFontEnabled'),fontChoice=page.locator('#btFontChoice');
+    assert.equal(await fontToggle.isChecked(),false);
+    assert.equal(await fontChoice.isDisabled(),true);
+    await fontToggle.check();
+    await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
+    assert.equal(config.bt_profiles[0].font_mode,1);
+    assert.equal(await fontChoice.inputValue(),'1');
+    await fontChoice.selectOption('2');
+    await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
+    assert.equal(config.bt_profiles[0].font_mode,2);
+    await page.reload();
+    await page.waitForFunction(()=>document.getElementById('btFontChoice').value==='2');
+    await page.evaluate(()=>showView('watch'));
+    assert.equal(await fontToggle.isChecked(),true);
+    rejectNextWatchOption=true;
+    await fontToggle.click();
+    await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
+    assert.equal(await fontToggle.isChecked(),true,'failed font save restores the focused switch');
+    assert.equal(await fontChoice.inputValue(),'2');
+    await fontToggle.uncheck();
+    await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
+    assert.equal(config.bt_profiles[0].font_mode,0,'Off keeps the watch font unchanged on sync');
+    await fontToggle.check();
+    await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
+    assert.equal(config.bt_profiles[0].font_mode,1);
+    await page.screenshot({path:'/tmp/radioclock-v46-watch-options.png',fullPage:true});
+    await page.evaluate(()=>showView('network'));
+    const powerToggle=page.locator('#btIdlePowerSave');
+    await powerToggle.check();
+    await page.waitForFunction(()=>!pendingSettings.has('bt_idle_power_save')&&!document.getElementById('btIdlePowerSave').disabled);
+    assert.equal(config.bt_idle_power_save,true);
+    assert.equal(await page.locator('#btPowerStatus').textContent(),'On');
+    rejectNextWatchOption=true;
+    await powerToggle.click();
+    await page.waitForFunction(()=>!pendingSettings.has('bt_idle_power_save')&&!document.getElementById('btIdlePowerSave').disabled);
+    assert.equal(await powerToggle.isChecked(),true,'failed power save restores saved choice');
+    await page.reload();
+    await page.waitForFunction(()=>document.getElementById('btIdlePowerSave').checked);
+    await page.evaluate(()=>showView('network'));
+    await page.screenshot({path:'/tmp/radioclock-v46-power-options.png',fullPage:true});
+
+    // Device defaults turn all four automatic slots and unset Always Wait On.
+    // Explicit user-saved Off must remain Off after loading those defaults.
+    delete config.bt_always_wait;
+    config.bt_times = [390, 750, 1110, 1380].map(minute => ({ minute, enabled: true, protocol: 0, profile: 0 }));
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll('#btScheduleList input[type="checkbox"]:checked').length === 4 && document.getElementById('btAlwaysWait').checked);
+    assert.equal(await page.locator('#btAlwaysWait').isChecked(), true, 'unset Always Wait defaults to On');
+    assert.equal(await page.locator('#btPowerStatus').textContent(),'Paused by Always Wait');
+    await page.evaluate(() => {
+      const wait = window.setBtAlwaysWait;
+      window.setBtAlwaysWait = (...args) => (window.lastAlwaysWaitSave = wait(...args));
+    });
+    await page.evaluate(() => showView('settings'));
+    await page.locator('#btAlwaysWait').uncheck();
+    await page.evaluate(async () => await window.lastAlwaysWaitSave);
+    await page.evaluate(() => showView('schedules'));
+    await page.locator('#btScheduleList input[type="checkbox"]').nth(1).uncheck();
+    await page.waitForFunction(() => btSlotSaving < 0);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll('#btScheduleList input[type="checkbox"]').length === 4 && document.querySelectorAll('#btScheduleList input[type="checkbox"]:checked').length === 3);
+    assert.equal(await page.locator('#btAlwaysWait').isChecked(), false, 'saved Always Wait Off overrides the On default');
+    assert.equal(await page.locator('#btScheduleList input[type="checkbox"]').nth(1).isChecked(), false, 'saved automatic-slot Off overrides the On default');
+    assert.equal(await page.locator('#btScheduleList input[type="checkbox"]:checked').count(), 3);
+    await page.evaluate(() => showView('settings'));
+    assert.equal(await activityLed.isChecked(), true, 'watch settings do not alter the saved LED choice');
+    await page.evaluate(() => showView('settings'));
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.screenshot({ path: '/tmp/radioclock-v46-led-settings.png', fullPage: true });
+    assert.deepEqual(await page.locator('.navbtn').allTextContents(), ['Overview', 'Radio', 'Watch (BLE)', 'Schedules', 'Network', 'Settings', 'Diagnostics', 'About']);
     assert.deepEqual(pageErrors, []);
-    console.log('Browser regressions passed: LF drafts, empty inputs, midnight/all-day ranges, automatic toggle autosave/RF Save/stale polls/rejection, safe replacement pairing, saved delivery and later failures, eight sidebar routes.');
+    console.log('Browser regressions passed: font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

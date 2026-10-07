@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_5/RadioClock_V4_5.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_6/RadioClock_V4_6.ino'
 
 
 def extract_function(source, name):
@@ -362,6 +362,15 @@ int main() {
   assert(dataChar.completionStatuses.empty());
   assert(retainedClient.securityCalls == securityBeforeRetry + 2);
   retainedClient.mtu = 255;
+  // Font replies use the basic-settings channel, never the SP_DATA stream.
+  timeChar.uuid = CASIO_SET_CHAR;
+  dataChar.uuid = CASIO_SP_DATA_CHAR;
+  btExpectedHeader=0x13;btResponseActive=true;btResponseLength=0;btResponseOverflow=false;
+  uint8_t basic[17]={0x13};
+  gshockNotifyCallback(&dataChar,basic,sizeof(basic),true);assert(btResponseLength==0);
+  gshockNotifyCallback(&timeChar,basic,9,true);assert(btResponseLength==9);
+  gshockNotifyCallback(&timeChar,basic+9,8,true);assert(btResponseLength==17 && !btResponseOverflow);
+  btResponseActive=false;
   // RF demand cancels both writes and notification waits immediately.
   rfDemand = true;
   int previousWrites = dataChar.writes;
