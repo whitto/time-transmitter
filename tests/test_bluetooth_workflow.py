@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_1_Casio_BLE_Reliability/RadioClock_V4_1_Casio_BLE_Reliability.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_2_BLE_Scheduler/RadioClock_V4_2_BLE_Scheduler.ino'
 
 
 def balanced_block(source, start):
@@ -408,6 +408,21 @@ int main(int argc, char**) {
   assert(bluetoothTimeSlotConflicts(750));
   schedule_count = 0;
 
+  // V4.2 regression: automatic Bluetooth may enter after its exact target
+  // minute while the independent Bluetooth-time window remains open.
+  btAlwaysWaitEnabled = false;
+  stopBluetoothWindow();
+  std::fill(std::begin(btSyncEnabled), std::end(btSyncEnabled), false);
+  btProfileSuccessYear[3] = -1; btProfileSuccessYday[3] = -1;
+  btSyncEnabled[2] = true; btSyncTimes[2] = 1318; // 21:58 Brisbane; current BT time is 22:00.
+  btSyncProfile[2] = 3; btSyncProtocol[2] = BT_PROTOCOL_ANALOGUE;
+  schedule_count = 1; schedules[0] = {715, 725}; // Partial RF overlap must not disable this slot.
+  assert(bluetoothTimeSlotConflicts(1318));
+  serviceBluetoothSync();
+  assert(btWindowActive && btSyncActiveSlot == 2 && btActiveProfile == 3);
+  assert(btActiveProtocol == BT_PROTOCOL_ANALOGUE);
+  stopBluetoothWindow(); btSyncEnabled[2] = false; schedule_count = 0;
+
   // RF has priority, with disconnect and physical-controller failures keeping RF off.
   mockQuiescent = false;
   assert(!radioBleArbiter.requestRf()); serviceBluetoothSync();
@@ -483,7 +498,7 @@ class BluetoothWorkflowTest(unittest.TestCase):
         names = ['btWatchNameMatches', 'clearBtDiscovery', 'consumeBtDiscovery',
                  'cancelBtResponse', 'radioScheduleActiveNow', 'bluetoothActivityPresent',
                  'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
-                 'btMinutesOfDay', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
+                 'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'attemptBluetoothSync', 'serviceBluetoothSync',
                  'bluetoothSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
                  'btLastSunday', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
