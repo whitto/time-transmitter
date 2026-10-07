@@ -29,7 +29,7 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.7', station: -1, radio_active: false,
+    firmware_version: 'V4.8', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     bt_day_complete: true, bt_pairing: false,
   };
@@ -127,7 +127,7 @@ const { chromium } = require('playwright');
         data = { status: 'ok' };
       }
       else if (url === '/api/diagnostics') data = {
-        firmware:'V4.7',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
+        firmware:'V4.8',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
         heap_free:120000,heap_min_free:110000,clock_state:'Synchronized',ntp_age_sec:60,
         ntp_sync_count:12,clock_error_est_sec:0.1,ntp_interval_sec:3600,wifi_connected:true,wifi_ip:'192.168.1.36',
         radio_active:false,radio_paused:false,carrier_hz:0,boundary_delay_us:80,boundary_delay_worst_us:100,
@@ -138,7 +138,7 @@ const { chromium } = require('playwright');
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.7');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.8');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -245,6 +245,7 @@ const { chromium } = require('playwright');
     assert.equal(await automaticToggle.isChecked(), false, 'RF Save must not be needed to reveal a failed toggle');
 
     assert.equal(await page.locator('#heroWatch').textContent(), 'Delivered · 2026-10-07 11:30:42', 'saved delivery must survive reboot status');
+    assert.equal(await page.locator('#watchStatus').textContent(),'Time sync delivered');
     status.bt_last_sync_status = 'GW-BX5600 MIP - sync attempt failed';
     await page.evaluate(() => tick());
     assert.equal(await page.locator('#heroWatch').textContent(), 'Failed', 'a newer failure must remain visible after a saved delivery');
@@ -353,8 +354,10 @@ const { chromium } = require('playwright');
     await fontToggle.check();
     await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
     assert.equal(config.bt_profiles[0].font_mode,1);
-    await page.screenshot({path:'/tmp/radioclock-v47-watch-options.png',fullPage:true});
-    await page.evaluate(()=>showView('network'));
+    await page.screenshot({path:'/tmp/radioclock-v48-watch-options.png',fullPage:true});
+    await page.evaluate(()=>showView('settings'));
+    assert.equal(await page.locator('#view-settings #bluetooth-power-settings').count(),1);
+    assert.equal(await page.locator('#view-network #bluetooth-power-settings').count(),0);
     const powerToggle=page.locator('#btIdlePowerSave');
     await powerToggle.check();
     await page.waitForFunction(()=>!pendingSettings.has('bt_idle_power_save')&&!document.getElementById('btIdlePowerSave').disabled);
@@ -366,8 +369,8 @@ const { chromium } = require('playwright');
     assert.equal(await powerToggle.isChecked(),true,'failed power save restores saved choice');
     await page.reload();
     await page.waitForFunction(()=>document.getElementById('btIdlePowerSave').checked);
-    await page.evaluate(()=>showView('network'));
-    await page.screenshot({path:'/tmp/radioclock-v47-power-options.png',fullPage:true});
+    await page.evaluate(()=>showView('settings'));
+    await page.screenshot({path:'/tmp/radioclock-v48-power-options.png',fullPage:true});
 
     // Device defaults turn all four automatic slots and unset Always Wait On.
     // Explicit user-saved Off must remain Off after loading those defaults.
@@ -396,7 +399,7 @@ const { chromium } = require('playwright');
     assert.equal(await activityLed.isChecked(), true, 'watch settings do not alter the saved LED choice');
     await page.evaluate(() => showView('settings'));
     await page.evaluate(() => document.activeElement?.blur());
-    await page.screenshot({ path: '/tmp/radioclock-v47-led-settings.png', fullPage: true });
+    await page.screenshot({ path: '/tmp/radioclock-v48-led-settings.png', fullPage: true });
     assert.deepEqual(await page.locator('.navbtn').allTextContents(), ['Overview', 'Radio', 'Watch (BLE)', 'Schedules', 'Network', 'Settings', 'Diagnostics', 'About']);
     const diagBefore=requests.filter(r=>r.url==='/api/diagnostics').length;
     await page.evaluate(async()=>{showView('advanced');await Promise.all(Array.from({length:20},()=>updateDiagnostics(true)))});
@@ -407,7 +410,7 @@ const { chromium } = require('playwright');
     assert.match(await page.locator('#diagnostics').textContent(),/Last reset reason: Brownout/);
     assert.match(await page.locator('#diagnostics').textContent(),/Largest free heap block: 90000 bytes/);
     await page.evaluate(()=>window.scrollTo(0,0));
-    await page.screenshot({path:'/tmp/radioclock-v47-diagnostics.png',fullPage:true});
+    await page.screenshot({path:'/tmp/radioclock-v48-diagnostics.png',fullPage:true});
     assert.deepEqual(pageErrors, []);
     console.log('Browser regressions passed: font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {

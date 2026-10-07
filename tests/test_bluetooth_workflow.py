@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_7/RadioClock_V4_7.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_8/RadioClock_V4_8.ino'
 
 
 def balanced_block(source, start):
@@ -128,6 +128,7 @@ time_t fakeTime(time_t* out) { if (out) *out = fakeEpoch; return fakeEpoch; }
 #define time fakeTime
 constexpr int WL_CONNECTED = 3;
 struct WiFiMock { int status() const { return WL_CONNECTED; } } WiFi;
+void beginWifiCredentialConnection() {}
 int sntpRestarts = 0;
 void sntp_restart() { ++sntpRestarts; }
 struct NimBLEUUID { explicit NimBLEUUID(const char*) {} };

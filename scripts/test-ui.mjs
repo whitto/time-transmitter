@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.7', radio_active: false, station: -1,
+  firmware_version: 'V4.8', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -150,18 +150,22 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.7');
+assert.equal(element('fw').textContent, 'V4.8');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
-assert.match(element('watchStatus').textContent, /delivered.*saved/);
+assert.equal(element('watchStatus').textContent, 'Time sync delivered');
 status.bt_last_sync_status = 'Last time write delivered (saved; watch unverified)';
 await evaluate('tick()');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42');
+assert.equal(element('watchStatus').textContent, 'Time sync delivered');
+assert.equal(element('homeWatchStatus').textContent, 'Time sync delivered');
 status.bt_last_sync_status = 'Watch 1: GW-BX5600 MIP - time write delivered (watch unverified)';
 status.bt_day_complete = true;
 await evaluate('tick()');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42');
+assert.equal(element('watchStatus').textContent, 'Time sync delivered');
+assert.equal(element('homeWatchStatus').textContent, 'Time sync delivered');
 assert.equal(element('homeWatchDate').textContent, '2026-10-06 22:15:42');
 assert.equal(element('quickWatchSub').textContent, '2026-10-06 22:15:42');
 status.bt_last_sync_status = 'GW-BX5600 MIP - sync attempt failed';
