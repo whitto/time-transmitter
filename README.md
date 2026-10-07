@@ -93,7 +93,7 @@ The Watch card's **Bluetooth time zone** and **Bluetooth time offset** apply onl
 
 The live source is `ui/radioclock.html`.
 
-V4.1 is a UI-only release. Firmware logic, radio timing/output, Bluetooth protocols, scheduling, time calculations, configuration format and API handlers are identical to V3.5. The firmware changes are its V4.1 version label, sketch filename and generated web-page asset.
+V4.2 keeps the V4.1 dashboard and fixes the automatic Bluetooth scheduler. Each watch target is eligible from five minutes before through five minutes after in the independent Bluetooth timezone. Missing the original preparation minute no longer loses the whole attempt, and a slot can resume after JJY/LF pre-emption if its Bluetooth window is still open.
 
 The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and a skyline illustration without external fonts, images or scripts. The fixed left sidebar keeps all eight labelled items at every screen width: Overview, Radio, Watch (BLE), Schedules, Network, Settings, Diagnostics and About. Each opens its own page. Radio and LF schedule controls use the same DOM elements as their overview cards, so unsaved edits survive navigation. Its controls call the existing APIs, and JJY/LF and Bluetooth time remain separately visible.
 
@@ -115,7 +115,7 @@ See `docs/V4.2-review.md` for the current release checks. `docs/V3.5-review.md` 
 
 ## Build status
 
-V4.1 compiles with the pinned toolchain: **1,386,596 bytes of flash (44% of the 3 MB app partition)** and **61,672 bytes of static RAM (18%)**. UI, BLE lifecycle/workflow, RF handoff, packet framing, and concurrent ownership host tests pass. All eight labelled sidebar items and their pages were checked at 1536, 1024, 820, 390 and 320px with mocked APIs. Physical watch and RF acceptance remains as documented for V3.5.
+V4.2 uses the same classic ESP32 Node32 / ESP32 Dev Module target, Arduino-ESP32 3.3.11 toolchain and 3 MB app partition as V4.1. The repository tests now point at the V4.2 sketch and include a regression case for entering an automatic Bluetooth window after the nominal target minute. Physical watch and RF acceptance remain device tests.
 
 ## Credits and provenance
 
@@ -125,7 +125,7 @@ The supplied RadioClock source retains these original credits:
 - **5Breeze** — [ClockWaveXmitter](https://github.com/5Breeze/ClockWaveXmitter) improvements, copyright **2025**; the source identifies web UI, Wi-Fi configuration, multi-station scheduling, and station rotation additions. Its README also credits nisejjy and requests source credit for redistribution, adaptation, or commercial use.
 - **RadioClock V2.7 through V3.2.2** — the supplied firmware lineage and baseline used for this project's V3.5 continuation. The V3.2.1 source is preserved in `baseline/` for comparison.
 
-Those copyright notices remain in the firmware headers. V4.1 preserves the V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration, build tooling, and regression checks, and updates the dashboard presentation.
+Those copyright notices remain in the firmware headers. V4.2 preserves the V4.1 dashboard and V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration, build tooling, and regression checks, while correcting automatic Bluetooth scheduling.
 
 The project also uses these libraries and platforms:
 
