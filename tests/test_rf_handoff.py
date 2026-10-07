@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_1_Casio_BLE_Reliability/RadioClock_V4_1_Casio_BLE_Reliability.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_2_BLE_Scheduler/RadioClock_V4_2_BLE_Scheduler.ino'
 
 
 def extract_function(source, name):
@@ -46,7 +46,7 @@ MOCKS = r'''
 #include <cstdio>
 #include <ctime>
 #include <initializer_list>
-#include "firmware/RadioClock_V4_1_Casio_BLE_Reliability/RadioBleArbiter.h"
+#include "firmware/RadioClock_V4_2_BLE_Scheduler/RadioBleArbiter.h"
 #define PIN_RADIO 12
 #define PIN_LED 25
 #define PIN_BUZZ 26
