@@ -1,4 +1,4 @@
-# Time Transmitter — RadioClock V4.1
+# Time Transmitter — RadioClock V4.2
 
 Time Transmitter is an ESP32 project for synchronizing watches with local LF time signals or Casio Bluetooth time delivery. It combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar),  the observed range of the transmitter (in JJY40 mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary)
@@ -52,7 +52,7 @@ The tested target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash
 
 For Arduino IDE, install those board/library versions and open:
 
-`firmware/RadioClock_V4_1_Casio_BLE_Reliability/RadioClock_V4_1_Casio_BLE_Reliability.ino`
+`firmware/RadioClock_V4_2_BLE_Scheduler/RadioClock_V4_2_BLE_Scheduler.ino`
 
 Keep `RadioBleArbiter.h`, `CasioBxProtocol.h`, and `partitions.csv` beside the sketch. Select a compatible classic ESP32 board and 4 MB flash. The included large-app layout has one application slot; it does not support dual-slot OTA updates.
 
@@ -67,7 +67,7 @@ bash scripts/test.sh
 
 The installer keeps the pinned tools and packages in `/workspace/.radioclock-tools`, checks the official CLI checksum, and retains Arduino package signature/checksum and TLS verification. It uses injected proxy configuration when present. A later task can reuse the installed snapshot. Cloud tasks already have isolated checkouts; use this checkout without creating a Git worktree.
 
-Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_1_Casio_BLE_Reliability`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
+Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_2_BLE_Scheduler`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
 
 ## Watch controls
 
@@ -83,7 +83,7 @@ handshake stage, negotiated MTU, and ATT error. It preserves the watch's existin
 settings and sends complete packets with their required write modes. See
 [the handshake evidence and device check](docs/GW-BX5600-SP-handshake.md).
 
-**Always wait for watch sync requests** listens only for the selected paired watch while RF is idle. It resumes after successful/failed sync and after RF ends. It never learns an unknown watch. Watches that rotate their BLE address may require explicit pairing again; the binding filter remains strict.
+**Always wait for watch sync requests** listens only for the selected paired watch while RF is idle. JJY/LF has absolute priority: BLE is shut down during RF and resumes afterward. If RF covers an entire automatic Bluetooth window, that watch attempt cannot be received. It never learns an unknown watch. Watches that rotate their BLE address may require explicit pairing again; the binding filter remains strict.
 
 The Watch card's **Bluetooth time zone** and **Bluetooth time offset** apply only to BLE watch writes and automatic Bluetooth sync slots. They default to Australia/Brisbane and zero additional offset, and support the same fixed/DST-aware zones shown by the main clock. JJY and the other LF encoders continue using the main **Time zone** and **Transmission offset** settings. The dashboard's JJY card reports the active radio time and the calculated Bluetooth watch time together, and the overview records the date and time of the last successful Bluetooth write.
 
@@ -99,7 +99,7 @@ The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and
 
 Before publishing, compare the rendered UI against the user's request and the approved mockup. Ask before changing the fundamental layout or deviating from that design. These release requirements are recorded in `AGENTS.md`.
 
-[Download the V4.1 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.1.zip).
+[Download the V4.2 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/heads/v4.2.zip).
 
 After editing the UI, regenerate its embedded gzip asset and run checks:
 
@@ -111,7 +111,7 @@ bash scripts/compile.sh
 
 The checks run the actual UI script against mocked APIs, compile extracted firmware functions against host mocks, stress the real atomic RF/BLE arbiter concurrently, and verify gzip, DOM references, API routes, versions, and partition bounds. They exercise state transitions and failures; they do not emulate the ESP32 radio or prove the watch display changed.
 
-See `docs/V4.1-review.md` for the current release checks. `docs/V3.5-review.md` records the inherited firmware checks and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
+See `docs/V4.2-review.md` for the current release checks. `docs/V3.5-review.md` records the inherited firmware checks and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
 
 ## Build status
 
