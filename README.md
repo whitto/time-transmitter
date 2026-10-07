@@ -1,4 +1,4 @@
-# Time Transmitter — RadioClock V4.6
+# Time Transmitter — RadioClock V4.7
 
 Time Transmitter is an ESP32 project for synchronizing watches with local LF time signals or Casio Bluetooth time delivery. It combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar),  the observed range of the transmitter (in JJY40 mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary)
@@ -22,6 +22,7 @@ Dashboard preview with sample status data.
 - Successful Bluetooth syncs show their date and time in the overview hero, watch card, and quick status. Automatic watch-sync slots are interpreted in the selected Bluetooth timezone plus offset, while LF schedules stay in the JJY/station timezone.
 - A saved blue ESP32 activity LED toggle: Off keeps GPIO2 dark; On flashes during LF transmission or Bluetooth connection/time synchronization. Wi-Fi connection and idle watch listening do not light it.
 - Per-watch GW-BX5600 font selection, applied and checked during the next ESP32 Bluetooth sync; optional controller shutdown between scheduled watch windows.
+- Diagnostics shows Always Wait state (including RF pause), the next JJY date/time in the station timezone, and reset/memory evidence for troubleshooting.
 - A gzip-compressed web UI, LittleFS configuration storage, and Always on or Scheduled/power-save Wi-Fi.
 
 | Time-signal format | Carrier |
@@ -50,11 +51,11 @@ The firmware provides the carrier output for an external transmitter/antenna cir
 
 ## Build
 
-The tested target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash, Arduino-ESP32 **3.3.11**, NimBLE-Arduino **2.5.1**, and ArduinoJson **6.21.5**. The sketch-local partition table has a 3 MB application partition and LittleFS storage.
+The tested target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash, Arduino-ESP32 **3.3.12**, NimBLE-Arduino **2.5.1**, and ArduinoJson **6.21.5**. The sketch-local partition table has a 3 MB application partition and LittleFS storage.
 
 For Arduino IDE, install those board/library versions and open:
 
-`firmware/RadioClock_V4_6/RadioClock_V4_6.ino`
+`firmware/RadioClock_V4_7/RadioClock_V4_7.ino`
 
 Keep all companion headers, including `RadioBleArbiter.h`, `CasioBxProtocol.h` and `CasioWatchSettings.h`, and `partitions.csv` beside the sketch. For **ESP32 Dev Module**, select **Flash Size: 4MB (32Mb)** and **Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)**. The default 1.25 MB application partition is too small for this project. On **Node32s**, **No OTA (Large APP)** also provides sufficient compile capacity; the included sketch-local partition table supplies the project's 3 MB application layout. This layout has one application slot and does not support dual-slot OTA updates.
 
@@ -69,7 +70,7 @@ bash scripts/test.sh
 
 The installer keeps the pinned tools and packages in `/workspace/.radioclock-tools`, checks the official CLI checksum, and retains Arduino package signature/checksum and TLS verification. It uses injected proxy configuration when present. A later task can reuse the installed snapshot. Cloud tasks already have isolated checkouts; use this checkout without creating a Git worktree.
 
-Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_6`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
+Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_7`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
 
 ## Watch controls
 
@@ -103,13 +104,13 @@ In **Network**, **Power down idle Bluetooth** turns the Bluetooth controller off
 
 The live source is `ui/radioclock.html`.
 
-V4.6 adds per-watch font changes during Bluetooth sync, idle Bluetooth controller power saving and the persisted blue LED activity control, and defaults unset Bluetooth schedules/Always Wait to On. A separate low-priority task flashes the indicator without changing radio timing or Bluetooth writes. The V4.5 clock, scheduling, timezone, persistence and editor fixes remain in place.
+V4.7 adds Diagnostics summaries for full-time Bluetooth listening and the next JJY window, coalesces overlapping diagnostic refreshes, and reports reset reason, largest heap block and loop-stack headroom. It targets Arduino-ESP32 3.3.12. The cause of reported hardware restarts has not been established without a reset log. V4.6 added per-watch font changes during Bluetooth sync, idle Bluetooth controller power saving and the persisted blue LED activity control, and defaults unset Bluetooth schedules/Always Wait to On. A separate low-priority task flashes the indicator without changing radio timing or Bluetooth writes. The V4.5 clock, scheduling, timezone, persistence and editor fixes remain in place.
 
 The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and a skyline illustration without external fonts, images or scripts. The fixed left sidebar keeps all eight labelled items at every screen width: Overview, Radio, Watch (BLE), Schedules, Network, Settings, Diagnostics and About. Each opens its own page. Radio and LF schedule controls use the same DOM elements as their overview cards, so unsaved edits survive navigation. Its controls call the existing APIs, and JJY/LF and Bluetooth time remain separately visible.
 
 Before publishing, compare the rendered UI against the user's request and the approved mockup. Ask before changing the fundamental layout or deviating from that design. These release requirements are recorded in `AGENTS.md`.
 
-[Download the V4.6 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.6.zip).
+[Download the V4.7 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.7.zip).
 
 After editing the UI, regenerate its embedded gzip asset and run checks:
 
@@ -121,11 +122,11 @@ bash scripts/compile.sh
 
 The checks run the actual UI script against mocked APIs, compile extracted firmware functions against host mocks, stress the real atomic RF/BLE arbiter concurrently, and verify gzip, DOM references, API routes, versions, and partition bounds. They exercise state transitions and failures; they do not emulate the ESP32 radio or prove the watch display changed. With Playwright and Chromium installed, run `node scripts/test-ui-browser.cjs` for the real-browser schedule, toggle and pairing regressions; set `RADIOCLOCK_CHROMIUM` if the browser executable is elsewhere.
 
-See `docs/V4.6-review.md` for the current release checks. `docs/V4.5-review.md`, `docs/V4.2-review.md` and `docs/V3.5-review.md` record earlier changes and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
+See `docs/V4.7-review.md` for the current release checks. `docs/V4.5-review.md`, `docs/V4.2-review.md` and `docs/V3.5-review.md` record earlier changes and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
 
 ## Build status
 
-V4.6 uses the classic ESP32 Node32 / ESP32 Dev Module target, Arduino-ESP32 3.3.11 toolchain and 3 MB application partition. The repository checks target the V4.6 sketch, including font packets/readback, idle controller shutdown/wake, LED activity/persistence, clock/encoder, Bluetooth/RF and browser behavior. Compile and browser evidence is recorded in `docs/V4.6-review.md`. Physical watch, RF and LED acceptance remain device tests.
+V4.7 uses the classic ESP32 Node32 / ESP32 Dev Module target, Arduino-ESP32 3.3.12 toolchain and 3 MB application partition. The repository checks target the V4.7 sketch, including font packets/readback, idle controller shutdown/wake, LED activity/persistence, clock/encoder, Bluetooth/RF and browser behavior. Compile and browser evidence is recorded in `docs/V4.7-review.md`. Physical watch, RF and LED acceptance remain device tests.
 
 ## Credits and provenance
 
@@ -135,7 +136,7 @@ The supplied RadioClock source retains these original credits:
 - **5Breeze** — [ClockWaveXmitter](https://github.com/5Breeze/ClockWaveXmitter) improvements, copyright **2025**; the source identifies web UI, Wi-Fi configuration, multi-station scheduling, and station rotation additions. Its README also credits nisejjy and requests source credit for redistribution, adaptation, or commercial use.
 - **RadioClock V2.7 through V3.2.2** — the supplied firmware lineage and baseline used for this project's V3.5 continuation. The V3.2.1 source is preserved in `baseline/` for comparison.
 
-Those copyright notices remain in the firmware headers. V4.6 preserves the V4.1 dashboard and V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration and build tooling, with the final-review corrections described above.
+Those copyright notices remain in the firmware headers. V4.7 preserves the V4.1 dashboard and V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration and build tooling, with the final-review corrections described above.
 
 The project also uses these libraries and platforms:
 
@@ -148,4 +149,4 @@ The project also uses these libraries and platforms:
 
 The JJY implementation references [NICT's time-signal specification](https://jjy.nict.go.jp/jjy/trans/index-e.html). Firmware comments also acknowledge NIST (WWVB), PTB (DCF77), NPL (MSF), and BPC signal specifications. These are standards references, separate from source-code authorship.
 
-Neither nisejjy nor ClockWaveXmitter currently declares a standard software license or includes a LICENSE file, and the uploaded handoff did not include a project-level license grant. This repository preserves the supplied author notices and does not invent a license for inherited code. Dependencies retain their own licenses, including Arduino-ESP32's [LGPL 2.1](https://github.com/espressif/arduino-esp32/blob/3.3.11/LICENSE.md) and NimBLE-Arduino's [Apache 2.0](https://github.com/h2zero/NimBLE-Arduino/blob/2.5.1/LICENSE).
+Neither nisejjy nor ClockWaveXmitter currently declares a standard software license or includes a LICENSE file, and the uploaded handoff did not include a project-level license grant. This repository preserves the supplied author notices and does not invent a license for inherited code. Dependencies retain their own licenses, including Arduino-ESP32's [LGPL 2.1](https://github.com/espressif/arduino-esp32/blob/3.3.12/LICENSE.md) and NimBLE-Arduino's [Apache 2.0](https://github.com/h2zero/NimBLE-Arduino/blob/2.5.1/LICENSE).

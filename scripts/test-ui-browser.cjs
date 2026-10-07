@@ -29,7 +29,7 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.6', station: -1, radio_active: false,
+    firmware_version: 'V4.7', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     bt_day_complete: true, bt_pairing: false,
   };
@@ -126,11 +126,19 @@ const { chromium } = require('playwright');
         config.bt_always_wait = fields.bt_always_wait === '1';
         data = { status: 'ok' };
       }
+      else if (url === '/api/diagnostics') data = {
+        firmware:'V4.7',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
+        heap_free:120000,heap_min_free:110000,clock_state:'Synchronized',ntp_age_sec:60,
+        ntp_sync_count:12,clock_error_est_sec:0.1,ntp_interval_sec:3600,wifi_connected:true,wifi_ip:'192.168.1.36',
+        radio_active:false,radio_paused:false,carrier_hz:0,boundary_delay_us:80,boundary_delay_worst_us:100,
+        missed_second_boundaries:0,littlefs_used:4096,littlefs_total:983040,bt_window_active:false,
+        bt_connection_attempts:3,bt_acked_writes:2,bt_notifications:4,bt_response_errors:0,bt_delivery_evidence:'ATT write acknowledged; watch display unverified'
+      };
       else if (url === '/api/bluetooth-pair') data = { message: 'Pairing window opened' };
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.6');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.7');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -345,7 +353,7 @@ const { chromium } = require('playwright');
     await fontToggle.check();
     await page.waitForFunction(()=>!pendingSettings.has('bt_font_mode')&&!document.getElementById('btManualProfile').disabled);
     assert.equal(config.bt_profiles[0].font_mode,1);
-    await page.screenshot({path:'/tmp/radioclock-v46-watch-options.png',fullPage:true});
+    await page.screenshot({path:'/tmp/radioclock-v47-watch-options.png',fullPage:true});
     await page.evaluate(()=>showView('network'));
     const powerToggle=page.locator('#btIdlePowerSave');
     await powerToggle.check();
@@ -359,7 +367,7 @@ const { chromium } = require('playwright');
     await page.reload();
     await page.waitForFunction(()=>document.getElementById('btIdlePowerSave').checked);
     await page.evaluate(()=>showView('network'));
-    await page.screenshot({path:'/tmp/radioclock-v46-power-options.png',fullPage:true});
+    await page.screenshot({path:'/tmp/radioclock-v47-power-options.png',fullPage:true});
 
     // Device defaults turn all four automatic slots and unset Always Wait On.
     // Explicit user-saved Off must remain Off after loading those defaults.
@@ -388,8 +396,18 @@ const { chromium } = require('playwright');
     assert.equal(await activityLed.isChecked(), true, 'watch settings do not alter the saved LED choice');
     await page.evaluate(() => showView('settings'));
     await page.evaluate(() => document.activeElement?.blur());
-    await page.screenshot({ path: '/tmp/radioclock-v46-led-settings.png', fullPage: true });
+    await page.screenshot({ path: '/tmp/radioclock-v47-led-settings.png', fullPage: true });
     assert.deepEqual(await page.locator('.navbtn').allTextContents(), ['Overview', 'Radio', 'Watch (BLE)', 'Schedules', 'Network', 'Settings', 'Diagnostics', 'About']);
+    const diagBefore=requests.filter(r=>r.url==='/api/diagnostics').length;
+    await page.evaluate(async()=>{showView('advanced');await Promise.all(Array.from({length:20},()=>updateDiagnostics(true)))});
+    assert.equal(requests.filter(r=>r.url==='/api/diagnostics').length-diagBefore,1,'rapid refresh/navigation shares one diagnostics request');
+    await page.waitForFunction(()=>document.getElementById('diagnostics').textContent.includes('Next JJY transmission:'));
+    assert.match(await page.locator('#diagnostics').textContent(),/Full-time BT listen \(Always Wait\): Off/);
+    assert.match(await page.locator('#diagnostics').textContent(),/Next JJY transmission: 2026-10-07 21:00.*Asia\/Tokyo.*JJY 60 kHz/);
+    assert.match(await page.locator('#diagnostics').textContent(),/Last reset reason: Brownout/);
+    assert.match(await page.locator('#diagnostics').textContent(),/Largest free heap block: 90000 bytes/);
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:'/tmp/radioclock-v47-diagnostics.png',fullPage:true});
     assert.deepEqual(pageErrors, []);
     console.log('Browser regressions passed: font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {

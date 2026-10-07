@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.6', radio_active: false, station: -1,
+  firmware_version: 'V4.7', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -150,7 +150,7 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.6');
+assert.equal(element('fw').textContent, 'V4.7');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
@@ -396,3 +396,17 @@ assert.equal(element('btIdlePowerSave').checked,true);
 await evaluate('setBtAlwaysWait(true)');assert.equal(element('btPowerStatus').textContent,'Paused by Always Wait');
 await evaluate('loadConfig()');assert.equal(element('btIdlePowerSave').checked,true);
 console.log('UI handler tests passed: font profile selection/persistence/rollback/stale reads, idle BT power saving, LED, schedules and existing sync/pair behavior.');
+
+// Diagnostics uses saved device schedules and station time, independent of BT zone.
+const diagSummary=(s,c,w)=>evaluate(`diagnosticsScheduleSummary(${JSON.stringify(s)},${JSON.stringify(c)},${JSON.stringify(w)})`);
+const ds={time:'23:40:00',date:'2026-10-08',timezone:'Asia/Tokyo',clock_state:'Synchronized',bt_always_wait:true,bt_state:'Waiting for watch',radio_active:false};
+let summary=diagSummary(ds,{full_time_tx:false},[{station:0,start:390,end:450},{station:2,start:0,end:1440}]);
+assert.match(summary[0],/^On/);assert.match(summary[1],/2026-10-09 06:30.*Asia\/Tokyo.*JJY/);
+assert.match(diagSummary({...ds,bt_always_wait:false},{},[])[0],/^Off/);
+assert.match(diagSummary({...ds,radio_active:true},{},[])[0],/paused during RF/);
+assert.match(diagSummary({...ds,time:'06:40:00',station:0,radio_active:true},{},[{station:0,start:390,end:450}])[1],/Transmitting now/);
+assert.match(diagSummary(ds,{full_time_tx:true,full_time_station:1},[])[1],/full-time selected/);
+assert.match(diagSummary(ds,{full_time_tx:true,full_time_station:2},[{station:0,start:390,end:450}])[1],/overrides schedules/);
+assert.match(diagSummary(ds,{},[{station:2,start:0,end:1440}])[1],/No JJY transmission scheduled/);
+assert.match(diagSummary({...ds,clock_state:'Unsynchronized'},{},[])[1],/Unknown/);
+console.log('Diagnostics summary checks passed: Always Wait, RF pause, next-day JJY, active windows, full-time overrides and unknown clock.');

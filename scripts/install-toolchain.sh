@@ -41,7 +41,7 @@ fi
 # Arduino CLI verifies the Arduino index signatures and package checksums.
 # Retain default signature, checksum and TLS validation.
 "$cli" core update-index --additional-urls "$esp32_index"
-"$cli" core install esp32:esp32@3.3.11 --additional-urls "$esp32_index"
+"$cli" core install esp32:esp32@3.3.12 --additional-urls "$esp32_index"
 "$cli" lib install 'NimBLE-Arduino@2.5.1' 'ArduinoJson@6.21.5'
 "$cli" version
 "$cli" core list
