@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.1', radio_active: false, station: -1,
+  firmware_version: 'V4.5', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -65,6 +65,8 @@ const requests = [];
 let failNextSettings = false;
 let releaseStatus;
 let deferNextStatus = false;
+let releaseConfig;
+let deferNextConfig = false;
 class FormData {
   constructor() { this.fields = []; }
   append(key, value) { this.fields.push([key, value]); }
@@ -86,9 +88,23 @@ const fetch = async (url, options = {}) => {
       else if (key === 'bt_time_offset_minutes') state[key] = Number(value);
       else if (key === 'bt_timezone') state[key] = value;
     }
+    if (Object.hasOwn(fields, 'bt_slot')) {
+      const slot = state.bt_times[Number(fields.bt_slot)];
+      if (Object.hasOwn(fields, 'bt_slot_enabled')) slot.enabled = fields.bt_slot_enabled === '1';
+      if (Object.hasOwn(fields, 'bt_slot_time')) slot.minute = Number(fields.bt_slot_time);
+      if (Object.hasOwn(fields, 'bt_slot_profile')) slot.profile = Number(fields.bt_slot_profile);
+      if (Object.hasOwn(fields, 'bt_slot_protocol')) slot.protocol = Number(fields.bt_slot_protocol);
+    }
     return response({ status: 'success' });
   }
-  if (url === '/api/config') return response(state);
+  if (url === '/api/config') {
+    const snapshot = structuredClone(state);
+    if (deferNextConfig) {
+      deferNextConfig = false;
+      await new Promise(resolve => { releaseConfig = resolve; });
+    }
+    return response(snapshot);
+  }
   if (url === '/api/status') {
     const snapshot = { ...structuredClone(state), ...structuredClone(status) };
     if (deferNextStatus) {
@@ -126,12 +142,34 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
+assert.equal(element('fw').textContent, 'V4.5');
+assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
+assert.match(element('watchStatus').textContent, /delivered.*saved/);
+status.bt_last_sync_status = 'Last time write delivered (saved; watch unverified)';
+await evaluate('tick()');
+assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42');
 status.bt_last_sync_status = 'Watch 1: GW-BX5600 MIP - time write delivered (watch unverified)';
 status.bt_day_complete = true;
 await evaluate('tick()');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42');
 assert.equal(element('homeWatchDate').textContent, '2026-10-06 22:15:42');
 assert.equal(element('quickWatchSub').textContent, '2026-10-06 22:15:42');
+status.bt_last_sync_status = 'GW-BX5600 MIP - sync attempt failed';
+await evaluate('tick()');
+assert.equal(element('heroWatch').textContent, 'Failed', 'a later failed attempt must not display the earlier delivery as its result');
+assert.equal(element('homeWatchStatus').textContent, status.bt_last_sync_status);
+assert.equal(element('watchDate').textContent, '2026-10-06 22:15:42', 'retain the last successful delivery time alongside the latest failure');
+assert.equal(element('quickWatch').textContent, 'Failed');
+status.bt_last_sync_status = 'Never synced';
+status.bt_last_sync_date = '';
+status.bt_day_complete = false;
+await evaluate('tick()');
+assert.equal(element('heroWatch').textContent, 'Not synced');
+assert.equal(element('watchStatus').textContent, 'Never synced');
+assert.equal(element('homeWatchDate').textContent, 'No successful write recorded');
+status.bt_last_sync_date = '2026-10-06 22:15:42';
+status.bt_last_sync_status = 'Watch 1: GW-BX5600 MIP - time write delivered (watch unverified)';
+status.bt_day_complete = true;
 const timezoneRequestStart = requests.length;
 await evaluate("setBtTimezone('Asia/Tokyo')");
 assert.deepEqual(requests.slice(timezoneRequestStart).find(r => r.method === 'POST'), { url: '/api/config', method: 'POST', fields: { bt_timezone: 'Asia/Tokyo' } });
@@ -189,6 +227,37 @@ await evaluate('setBtAlwaysWait(true)');
 releaseStatus(); await staleTick;
 assert.equal(element('btAlwaysWait').checked, true, 'stale polling response must not revert a successful save');
 
+// Bluetooth slots need the same stale-response protection as other settings.
+state.bt_times = [{ minute: 30, enabled: false, protocol: 0, profile: 0, done_today: true }];
+await evaluate('loadConfig()');
+assert.match(element('btScheduleList').innerHTML, />Disabled<\/div>/, 'a disabled slot stays visibly disabled even after a delivery today');
+deferNextStatus = true;
+const staleSlotTick = evaluate('tick()');
+await evaluate('setBtSlot(0,true)');
+assert.equal(requests.findLast(r => r.method === 'POST').fields.bt_slot_enabled, '1');
+releaseStatus(); await staleSlotTick;
+assert.equal(evaluate('config.bt_times[0].enabled'), true, 'stale polling must not undo an automatic sync toggle');
+assert.match(element('btScheduleList').innerHTML, /type="checkbox"\s+checked/);
+assert.match(element('btScheduleList').innerHTML, /Enabled daily · delivered today/, 'delivery today must not imply that daily listening is disabled');
+assert.doesNotMatch(element('btScheduleList').innerHTML, /disabled/);
+
+// A configuration read started before the toggle must not overwrite it later.
+deferNextConfig = true;
+const staleConfig = evaluate('loadConfig()');
+await evaluate('setBtSlot(0,false)');
+releaseConfig(); await staleConfig;
+assert.equal(evaluate('config.bt_times[0].enabled'), false, 'stale config reads must preserve a later saved toggle');
+assert.doesNotMatch(element('btScheduleList').innerHTML, /type="checkbox"\s+checked/);
+assert.match(element('btScheduleList').innerHTML, />Disabled<\/div>/);
+assert.doesNotMatch(element('btScheduleList').innerHTML, /Enabled daily/);
+
+failNextSettings = true;
+await evaluate('setBtSlot(0,true)');
+assert.equal(evaluate('config.bt_times[0].enabled'), false, 'a rejected toggle must retain the saved value');
+assert.doesNotMatch(element('btScheduleList').innerHTML, /type="checkbox"\s+checked/);
+assert.doesNotMatch(element('btScheduleList').innerHTML, /disabled/);
+assert.equal(evaluate('btSlotSaving'), -1);
+
 const beforeSync = requests.length;
 await evaluate("syncBluetooth($('btSyncButton'))");
 await evaluate("syncBluetooth($('btSyncButton'))");
@@ -196,6 +265,11 @@ assert.deepEqual(requests.slice(beforeSync).map(r => [r.url, r.method]), [['/api
 assert.equal(element('btSyncButton').disabled, false);
 await evaluate("pairWatch($('btPairSettingsButton'))");
 assert.equal(requests.at(-1).url, '/api/bluetooth-pair');
+const beforeReplace = requests.length;
+await evaluate("pairWatch($('btReplaceWatchButton'))");
+assert.deepEqual(requests.slice(beforeReplace).map(r => [r.url, r.method]), [['/api/bluetooth-pair', 'POST']]);
+assert.ok(!requests.some(r => Object.hasOwn(r.fields, 'bt_rebind_profile')), 'replacement pairing must never request destructive rebinding');
+assert.equal(element('btReplaceWatchButton').disabled, false);
 await evaluate('tick()');
 assert.equal(element('btListenPill').textContent, 'Pairing');
 assert.equal(element('pairPill').textContent, 'Pairing');
@@ -222,4 +296,4 @@ assert.equal(element('btManualProfile').value, '1');
 assert.equal(element('btPairProfile').value, '1');
 assert.equal(element('btListenPill').textContent, 'Waiting for watch');
 assert.equal(element('btAlwaysWaitStatus').textContent, 'Always Wait: enabled');
-console.log('UI handler tests passed: settings, rollback, stale polling, watch text safety, separate sync/pair routes, RF state, replacement binding.');
+console.log('UI handler tests passed: settings, rollback, stale polling/config, automatic slot toggles, watch text safety, separate sync/pair routes, RF state, replacement binding, saved delivery and later failures.');

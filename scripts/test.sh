@@ -5,7 +5,9 @@ cd "$repo_dir"
 python3 scripts/validate-project.py
 node scripts/test-ui.mjs
 python3 tests/test_ble_lifecycle.py
+python3 tests/test_clock_and_encoders.py
 python3 tests/test_bluetooth_workflow.py
+python3 tests/test_schedule_persistence.py
 python3 tests/test_rf_handoff.py
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT

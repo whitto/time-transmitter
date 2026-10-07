@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_2_BLE_Scheduler/RadioClock_V4_2_BLE_Scheduler.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_5/RadioClock_V4_5.ino'
 
 
 def balanced_block(source, start):
@@ -53,7 +53,7 @@ def balanced_block(source, start):
 
 def extract_function(source, name):
     match = re.search(r'^(?:static )?(?:bool|void|int|String) ' + name +
-                      r'\([^;]+?\)\s*\{', source, re.M)
+                      r'\([^;]*?\)\s*\{', source, re.M)
     if not match:
         raise AssertionError(f'Function {name} missing')
     return balanced_block(source, match.start())
@@ -292,9 +292,28 @@ static void manualRetry() {
   serviceBluetoothSync();
   assert(btWindowActive && !btPersistentWaitActive && !btManualSyncRequested && !btPairModeActive);
 }
-int main(int argc, char**) {
+int main(int argc, char** argv) {
   setenv("TZ", "UTC0", 1); tzset();
   std::fill(std::begin(btSyncEnabled), std::end(btSyncEnabled), false);
+  if (argc > 1 && std::strcmp(argv[1], "midnight") == 0) {
+    bind(); initBluetoothSync(); btSyncEnabled[0] = true; btSyncTimes[0] = 0;
+    fakeEpoch = 1735653480; // Brisbane 2024-12-31 23:58: New Year's target is 2025-01-01.
+    serviceBluetoothSync(); assert(btWindowActive && btSyncActiveSlot == 0);
+    assert(btSlotAttemptYear[0] == 2025 && btSlotAttemptYday[0] == 0);
+    discover(); serviceBluetoothSync(); assert(!btWindowActive && btSyncEnabled[0]);
+    fakeEpoch += 180; serviceBluetoothSync(); assert(!btWindowActive); // 00:01 belongs to the same occurrence.
+    fakeEpoch += 23 * 3600 + 57 * 60; serviceBluetoothSync();
+    assert(btWindowActive && btSlotAttemptYear[0] == 2025 && btSlotAttemptYday[0] == 1);
+    stopBluetoothWindow(); resetBluetoothSlotAttempt(0);
+    btSyncTimes[0] = 1438; fakeEpoch = 1735653360; // Brisbane 2024-12-31 23:56, target 23:58.
+    serviceBluetoothSync(); assert(btWindowActive && btSlotAttemptYear[0] == 2024 && btSlotAttemptYday[0] == 365);
+    discover(); serviceBluetoothSync(); assert(!btWindowActive);
+    fakeEpoch += 300; serviceBluetoothSync(); assert(!btWindowActive); // 2025-01-01 00:01 still targets Dec 31.
+    fakeEpoch += 23 * 3600 + 55 * 60; serviceBluetoothSync();
+    assert(btWindowActive && btSlotAttemptYear[0] == 2025 && btSlotAttemptYday[0] == 0);
+    std::puts("Midnight/New Year windows retain target-day identity and reopen for the next daily occurrence");
+    return 0;
+  }
   if (argc > 1) {
     // A failed host init can still leave its controller enabled. RF must wait
     // for recovery, even though isInitialized() is false and no client exists.
@@ -357,7 +376,7 @@ int main(int argc, char**) {
   // Protocol selection stops passive scanning, preserves the old binding, and
   // a successful replacement commits only the selected watch/protocol.
   bind(1); bind(2); bind(3);
-  server.post("/test/protocol", {{"bt_manual_protocol", "1"}}); assert(server.code == 200 && configDirty);
+  server.post("/test/protocol", {{"bt_manual_protocol", "1"}}); assert(server.code == 200 && !configDirty);
   assert(btProfileProtocol[0] == BT_PROTOCOL_BX5600_MIP && !btWindowActive);
   serviceBluetoothSync(); assert(!btWindowActive);
   server.post("/api/bluetooth-pair"); serviceBluetoothSync();
@@ -385,12 +404,16 @@ int main(int argc, char**) {
   btProfileProtocol[3] = BT_PROTOCOL_ANALOGUE;
   writeConfigNow(); assert(flash.count(CONFIG_FILE) && !flash.count(CONFIG_TEMP_FILE));
   btAlwaysWaitEnabled = false; btManualProtocol = BT_PROTOCOL_BX5600_MIP;
+  btLastSyncStatus = "Never synced"; btLastSyncDate = ""; btDeliveryEvidence = "No delivery yet";
   for (int i = 0; i < BT_WATCH_PROFILE_COUNT; ++i) { btProfileAddress[i] = ""; btProfileProtocol[i] = 0; }
   loadConfig();
   assert(btAlwaysWaitEnabled && btManualProtocol == BT_PROTOCOL_STANDARD);
   assert(btTimezoneName == "Asia/Tokyo" && btTimeOffsetMinutes == 30);
   assert(btProfileAddress[0] == "11:22:33:44:55:66" && btProfileAddress[1] == "aa:bb:cc:dd:ee:ff");
   assert(btProfileProtocol[0] == 1 && btProfileProtocol[1] == 2 && btProfileProtocol[2] == 1 && btProfileProtocol[3] == 2);
+  assert(btLastSyncDate == "2024-01-01 22:00:00");
+  assert(btLastSyncStatus.indexOf("delivered") >= 0 && btLastSyncStatus.indexOf("watch unverified") >= 0);
+  assert(std::strstr(btDeliveryEvidence, "watch display unverified"));
 
   // BLE civil time is independent from the JJY timezone/offset and handles
   // the fixed-zone defaults plus an additive watch-only offset.
@@ -408,26 +431,119 @@ int main(int argc, char**) {
   assert(bluetoothTimeSlotConflicts(750));
   schedule_count = 0;
 
-  // V4.2 regression: automatic Bluetooth may enter after its exact target
-  // minute while the independent Bluetooth-time window remains open.
+  // Automatic Bluetooth can enter late, and disabling its active slot cancels
+  // its scan/discovery immediately without delivering another time write.
   btAlwaysWaitEnabled = false;
   stopBluetoothWindow();
   std::fill(std::begin(btSyncEnabled), std::end(btSyncEnabled), false);
   btProfileSuccessYear[3] = -1; btProfileSuccessYday[3] = -1;
   btSyncEnabled[2] = true; btSyncTimes[2] = 1318; // 21:58 Brisbane; current BT time is 22:00.
   btSyncProfile[2] = 3; btSyncProtocol[2] = BT_PROTOCOL_ANALOGUE;
-  schedule_count = 1; schedules[0] = {715, 725}; // Partial RF overlap must not disable this slot.
+  schedule_count = 1; schedules[0] = {713, 718}; // Partial RF overlap, already finished at 12:00 UTC.
   assert(bluetoothTimeSlotConflicts(1318));
   serviceBluetoothSync();
   assert(btWindowActive && btSyncActiveSlot == 2 && btActiveProfile == 3);
   assert(btActiveProtocol == BT_PROTOCOL_ANALOGUE);
-  stopBluetoothWindow(); btSyncEnabled[2] = false; schedule_count = 0;
+  btBleBusy = true; mockQuiescent = false;
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_enabled", "false"}});
+  assert(server.code == 409 && btSyncEnabled[2] && btWindowActive);
+  btBleBusy = false; mockQuiescent = true;
+  discover("MTG-B1000"); assert(btDiscoveryReady);
+  int beforeDisableWrites = writes;
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_enabled", "false"}});
+  assert(server.code == 200 && !btSyncEnabled[2] && !btWindowActive && !mockScan.scanning);
+  assert(!btDiscoveryReady && btSyncActiveSlot == -1 && btDeferredSlot == -1);
+  serviceBluetoothSync(); assert(!btWindowActive && writes == beforeDisableWrites);
+
+  // The same partially RF-overlapping slot can be re-enabled; full-time RF
+  // and other enabled Bluetooth slots retain their safety constraints.
+  full_time_tx = true;
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_enabled", "true"}});
+  assert(server.code == 409 && !btSyncEnabled[2]);
+  full_time_tx = false;
+  btSyncEnabled[1] = true; btSyncTimes[1] = 1319;
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_enabled", "true"}});
+  assert(server.code == 409 && !btSyncEnabled[2]);
+  btSyncEnabled[1] = false;
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_enabled", "true"}});
+  assert(server.code == 200 && btSyncEnabled[2] && btSlotAttemptYear[2] == -1);
+  serviceBluetoothSync(); assert(btSyncActiveSlot == 2 && btWindowActive);
+
+  // Time/profile/protocol changes reset that slot's attempt even when it has
+  // already listened today. The next service pass uses the new settings.
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_time", "1319"}});
+  assert(server.code == 200 && !btWindowActive && btSlotAttemptYear[2] == -1);
+  serviceBluetoothSync(); assert(btSyncActiveSlot == 2 && btWindowActive);
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_profile", "1"}});
+  assert(server.code == 200 && !btWindowActive && btSlotAttemptYear[2] == -1);
+  serviceBluetoothSync(); assert(btSyncActiveSlot == 2 && btActiveProfile == 1);
+  bind(1, BT_PROTOCOL_STANDARD);
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_protocol", "1"}});
+  assert(server.code == 200 && !btWindowActive && btSlotAttemptYear[2] == -1);
+  serviceBluetoothSync(); assert(btSyncActiveSlot == 2 && btActiveProtocol == BT_PROTOCOL_STANDARD);
+
+  // Rejected edits and edits to other slots preserve the active window, its
+  // discoveries, and queued explicit manual work.
+  auto unchangedEnd = btWindowEndMillis;
+  btSyncEnabled[0] = true; btSyncProfile[0] = 3; btSyncProtocol[0] = BT_PROTOCOL_ANALOGUE;
+  btSyncTimes[0] = 600;
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_profile", "3"}});
+  assert(server.code == 409 && btWindowActive && btSyncActiveSlot == 2 && btWindowEndMillis == unchangedEnd);
+  btSyncEnabled[0] = false;
+  server.post("/api/config", {{"bt_slot", "3"}, {"bt_slot_time", "1319"}});
+  assert(server.code == 409 && btWindowActive && btSyncActiveSlot == 2 && btWindowEndMillis == unchangedEnd);
+  server.post("/api/config", {{"bt_slot", "3"}, {"bt_slot_time", "900"}});
+  assert(server.code == 200 && btWindowActive && btSyncActiveSlot == 2 && btWindowEndMillis == unchangedEnd);
+  server.post("/api/bluetooth-sync"); assert(server.code == 200 && btManualSyncRequested);
+  server.post("/api/config", {{"bt_slot", "3"}, {"bt_slot_profile", "2"}});
+  assert(server.code == 200 && btManualSyncRequested && btSyncActiveSlot == 2);
+  btManualSyncRequested = false;
+
+  // Manual profile/protocol selection leaves an already-active automatic
+  // slot intact. Only an explicit Pair Watch request takes it over.
+  server.post("/api/config", {{"bt_manual_protocol", "2"}});
+  assert(server.code == 200 && btManualProtocol == BT_PROTOCOL_ANALOGUE);
+  assert(btWindowActive && btSyncActiveSlot == 2 && btActiveProtocol == BT_PROTOCOL_STANDARD);
+  assert(btWindowEndMillis == unchangedEnd);
+  server.post("/api/config", {{"bt_manual_profile", "3"}});
+  assert(server.code == 200 && btManualProfile == 3);
+  assert(btWindowActive && btSyncActiveSlot == 2 && btActiveProfile == 1 && btWindowEndMillis == unchangedEnd);
+  server.post("/api/bluetooth-pair"); assert(server.code == 200 && btPairRequested);
+  serviceBluetoothSync();
+  assert(btWindowActive && btPairModeActive && btSyncActiveSlot == -1);
+  assert(btActiveProfile == 3 && btActiveProtocol == BT_PROTOCOL_ANALOGUE && !btExpectedProfileAddress[0]);
+  stopBluetoothWindow();
+  server.post("/api/config", {{"bt_manual_profile", "0"}}); assert(server.code == 200);
+  server.post("/api/config", {{"bt_manual_protocol", "1"}}); assert(server.code == 200);
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_time", "1318"}});
+  assert(server.code == 200); serviceBluetoothSync(); assert(btSyncActiveSlot == 2);
+
+  // RF-interrupted automatic windows resume; editing while RF owns the radio
+  // clears the old deferred identity and allows the edited window to reopen.
+  assert(!radioBleArbiter.requestRf()); serviceBluetoothSync();
+  assert(btDeferredSlot == 2 && !btWindowActive && !btBleInitialized);
+  assert(radioBleArbiter.requestRf());
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_time", "1320"}});
+  assert(server.code == 200 && btDeferredSlot == -1 && btSlotAttemptYear[2] == -1);
+  radioBleArbiter.releaseRf(); serviceBluetoothSync();
+  assert(btWindowActive && btSyncActiveSlot == 2 && !btPersistentWaitActive);
+  assert(!radioBleArbiter.requestRf()); serviceBluetoothSync();
+  assert(btDeferredSlot == 2 && !btWindowActive);
+  assert(radioBleArbiter.requestRf());
+  server.post("/api/config", {{"bt_slot", "2"}, {"bt_slot_enabled", "false"}});
+  assert(server.code == 200 && btDeferredSlot == -1 && !btSyncEnabled[2]);
+  radioBleArbiter.releaseRf(); serviceBluetoothSync(); assert(!btWindowActive);
+  bind(1, BT_PROTOCOL_ANALOGUE); schedule_count = 0;
+  btAlwaysWaitEnabled = true;
+  serviceBluetoothSync(); assert(btPersistentWaitActive);
+  int previousDeinits = NimBLEDevice::deinits, previousBarriers = barriersReleased;
+  int previousRefreshes = radioRefreshes;
 
   // RF has priority, with disconnect and physical-controller failures keeping RF off.
   mockQuiescent = false;
   assert(!radioBleArbiter.requestRf()); serviceBluetoothSync();
   assert(radioBleArbiter.bleOwned() && !radioBleArbiter.rfOwned());
-  assert(NimBLEDevice::deinits == 0 && barriersReleased == 0 && !btWindowActive);
+  assert(NimBLEDevice::deinits == previousDeinits && barriersReleased == previousBarriers && !btWindowActive);
   server.post("/api/bluetooth-sync"); assert(server.code == 409);
   server.post("/api/bluetooth-pair"); assert(server.code == 409);
   tick += 1001; mockQuiescent = true; NimBLEDevice::deinitOk = false;
@@ -436,7 +552,7 @@ int main(int argc, char**) {
   serviceBluetoothSync(); assert(radioBleArbiter.bleOwned() && !radioBleArbiter.requestRf());
   tick += 1001; NimBLEDevice::controllerStops = true;
   serviceBluetoothSync();
-  assert(!btBleInitialized && btSuspendedByRadio && radioRefreshes == 1);
+  assert(!btBleInitialized && btSuspendedByRadio && radioRefreshes == previousRefreshes + 1);
   assert(radioBleArbiter.requestRf() && radioBleArbiter.rfOwned());
   int priorInits = NimBLEDevice::inits;
   serviceBluetoothSync(); assert(NimBLEDevice::inits == priorInits);
@@ -486,11 +602,8 @@ int main(int argc, char**) {
 }
 '''
 
-
 class BluetoothWorkflowTest(unittest.TestCase):
-    def test_real_firmware_workflow(self):
-        self.assertIsNotNone(shutil.which('g++'), 'g++ is required for host workflow tests')
-        source = FIRMWARE.read_text()
+    def unit_source(self, source):
         globals_start = source.index('enum CasioBleProtocol')
         globals_end = source.index('void initBluetoothSync(void);', globals_start)
         scan_start = source.index('class GShockScanCallbacks')
@@ -498,20 +611,27 @@ class BluetoothWorkflowTest(unittest.TestCase):
         names = ['btWatchNameMatches', 'clearBtDiscovery', 'consumeBtDiscovery',
                  'cancelBtResponse', 'radioScheduleActiveNow', 'bluetoothActivityPresent',
                  'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
-                 'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
-                 'stopBluetoothWindow', 'attemptBluetoothSync', 'serviceBluetoothSync',
-                 'bluetoothSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
-                 'btLastSunday', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
+                 'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
+                 'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'attemptBluetoothSync', 'serviceBluetoothSync',
+                 'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
+                 'btLastSunday', 'btDayOfYear', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
                  'loadConfig', 'writeConfigNow', 'saveConfig']
         functions = '\n\n'.join(extract_function(source, n) for n in names)
         routes = '\n'.join(extract_route(source, path) for path in
                            ['/api/settings', '/api/bluetooth-pair', '/api/bluetooth-sync'])
         protocol_branch = balanced_block(source, source.index('if (server.hasArg("bt_manual_protocol"))'))
+        profile_branch = balanced_block(source, source.index('if (server.hasArg("bt_manual_profile"))'))
+        slot_branch = balanced_block(source, source.index('if (server.hasArg("bt_slot"))'))
         routes = ('void registerRoutes() {\n' + routes +
-                  '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + protocol_branch + '\n});\n}')
+                  '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + protocol_branch + '\n});' +
+                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + protocol_branch + profile_branch + slot_branch + '\n});\n}')
         # Forward declaration precedes initBluetoothSync, which creates this callback class.
         functions = functions.replace('void initBluetoothSync(void) {', scan + '\n\nvoid initBluetoothSync(void) {', 1)
-        unit_source = '\n'.join([MOCKS, source[globals_start:globals_end], HELPERS, functions, routes, DRIVER])
+        return '\n'.join([MOCKS, source[globals_start:globals_end], HELPERS, functions, routes, DRIVER])
+
+    def test_real_firmware_workflow(self):
+        self.assertIsNotNone(shutil.which('g++'), 'g++ is required for host workflow tests')
+        unit_source = self.unit_source(FIRMWARE.read_text())
         with tempfile.TemporaryDirectory(prefix='radioclock-workflow-test-') as tmp:
             unit, binary = Path(tmp) / 'test.cpp', Path(tmp) / 'test'
             unit.write_text(unit_source)
@@ -519,6 +639,7 @@ class BluetoothWorkflowTest(unittest.TestCase):
                             '-I', str(FIRMWARE.parent), str(unit), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
             subprocess.run([str(binary), 'partial-init'], check=True)
+            subprocess.run([str(binary), 'midnight'], check=True)
 
 
 if __name__ == '__main__':

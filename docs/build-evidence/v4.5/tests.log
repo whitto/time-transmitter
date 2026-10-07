@@ -1,0 +1,36 @@
+PASS: gzip round-trip (21,336 bytes), JavaScript syntax, 129 DOM IDs, 9 UI routes, V4.5 versions, 4 MB partitions
+UI handler tests passed: settings, rollback, stale polling/config, automatic slot toggles, watch text safety, separate sync/pair routes, RF state, replacement binding, saved delivery and later failures.
+BLE lifecycle, RF cancellation, MTU guards, ATT errors, authentication retry and SP_DATA notifications passed
+.
+----------------------------------------------------------------------
+Ran 1 test in 1.536s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.722s
+
+OK
+BLE workflow, explicit pairing, HTTP retry, protocol persistence and fail-closed RF shutdown passed
+Failed BLE initialization retains RF exclusion and recovers after controller shutdown
+Midnight/New Year windows retain target-day identity and reopen for the next daily occurrence
+.
+----------------------------------------------------------------------
+Ran 1 test in 1.358s
+
+OK
+Real RF-save preserves Bluetooth settings; every daily slot listens, durable edits/rollback and reboot retention passed
+.
+----------------------------------------------------------------------
+Ran 1 test in 1.766s
+
+OK
+Real RF handoff tests passed: silence failure, detach recovery, lost confidence, scheduled/full-time preemption
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.155s
+
+OK
+Concurrent stress: 10000 RF sessions, 7449 BLE sessions; no modeled overlap
+RadioBleArbiter tests passed
+Casio BX protocol capture and malformed-packet checks passed
