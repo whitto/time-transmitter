@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_10/RadioClock_V4_10.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_11/RadioClock_V4_11.ino'
 
 
 def balanced_block(source, start):
@@ -74,10 +74,12 @@ MOCKS = r'''
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <functional>
 #include <map>
 #include <string>
 #include <strings.h>
+#include <vector>
 #include "RadioBleArbiter.h"
 #define portENTER_CRITICAL(x) ((void)0)
 #define portEXIT_CRITICAL(x) ((void)0)
@@ -123,6 +125,34 @@ struct SerialMock {
 } Serial;
 uint32_t tick = 100;
 uint32_t millis() { return tick; }
+bool hostContext = false, allowHostProgress = true;
+void delay(uint32_t);
+struct ble_npl_event {
+  void (*fn)(ble_npl_event*) = nullptr;
+  void* argument = nullptr;
+  bool queued = false;
+};
+std::deque<ble_npl_event*> hostEvents;
+std::vector<ble_npl_event*> submittedScanEvents;
+int scanEventReleases = 0;
+void ble_npl_event_init(ble_npl_event* e, void (*fn)(ble_npl_event*), void* argument) {
+  assert(!e->queued); e->fn = fn; e->argument = argument;
+}
+void* ble_npl_event_get_arg(ble_npl_event* e) { return e->argument; }
+void* nimble_port_get_dflt_eventq() { return nullptr; }
+void ble_npl_eventq_put(void*, ble_npl_event* e) {
+  assert(e->fn && !e->queued);
+  e->queued = true; submittedScanEvents.push_back(e); hostEvents.push_back(e);
+}
+void ble_npl_event_deinit(ble_npl_event*);
+void delay(uint32_t milliseconds) {
+  tick += milliseconds;
+  if (!allowHostProgress || hostEvents.empty()) return;
+  assert(!hostContext);
+  auto* event = hostEvents.front(); hostEvents.pop_front(); event->queued = false;
+  assert(event->fn);
+  hostContext = true; event->fn(event); hostContext = false;
+}
 time_t fakeEpoch = 1704110400; // 2024-01-01 12:00 UTC: deterministic slot/day checks.
 time_t fakeTime(time_t* out) { if (out) *out = fakeEpoch; return fakeEpoch; }
 #define time fakeTime
@@ -151,7 +181,7 @@ public:
   virtual void onResult(const NimBLEAdvertisedDevice*) {}
 };
 struct NimBLEScan {
-  bool scanning = false, startOk = true;
+  bool scanning = false, startOk = true, stopOk = true;
   int starts = 0, stops = 0;
   NimBLEScanCallbacks* callback = nullptr;
   void setScanCallbacks(NimBLEScanCallbacks* c, bool) { callback = c; }
@@ -159,10 +189,16 @@ struct NimBLEScan {
   void setInterval(int) {}
   void setWindow(int) {}
   void setMaxResults(int) {}
+  void setScanResponseTimeout(int timeout) { assert(timeout == 0); }
   bool isScanning() const { return scanning; }
-  bool start(unsigned long, bool, bool) { ++starts; return scanning = startOk; }
-  bool stop() { ++stops; scanning = false; return true; }
+  bool start(unsigned long, bool, bool) {
+    assert(hostContext); ++starts; return scanning = startOk;
+  }
+  bool stop() {
+    assert(hostContext); ++stops; if (!stopOk) return false; scanning = false; return true;
+  }
 } mockScan;
+#include "RadioBleScanControl.h"
 struct NimBLEClient {};
 struct NimBLERemoteService {};
 struct NimBLERemoteCharacteristic {};
@@ -187,6 +223,10 @@ struct NimBLEDevice {
 bool NimBLEDevice::initialized = false, NimBLEDevice::initOk = true;
 bool NimBLEDevice::deinitOk = true, NimBLEDevice::controllerStops = true;
 int NimBLEDevice::inits = 0, NimBLEDevice::deinits = 0;
+void ble_npl_event_deinit(ble_npl_event* e) {
+  assert(!NimBLEDevice::isInitialized() && !e->queued && hostEvents.empty());
+  ++scanEventReleases; e->fn = nullptr; e->argument = nullptr;
+}
 bool full_time_tx = false, trustedClock = true;
 bool clockTrusted() { return trustedClock; }
 struct Schedule { int start_min, end_min; } schedules[4]{};
@@ -250,6 +290,7 @@ static void setBluetoothPhase(const char* phase) { btPhase = phase; }
 static int btDeferredSlot = -1;
 static unsigned long btShutdownRetryMillis = 0;
 static bool btInitFailed = false;
+static RadioBleScanControl btScanControl;
 bool mockQuiescent = true, writeResult = true, preemptWrite = false;
 int disconnects = 0, barriersReleased = 0, writes = 0, lastWriteProtocol = -1;
 static bool btClientQuiescent() { return mockQuiescent; }
@@ -271,6 +312,7 @@ bool performCasioStandardTimeSync(int p) {
   return writeResult;
 }
 void initBluetoothSync();
+static bool bluetoothScanMayStart();
 static bool bluetoothControllerNeeded();
 static bool shutdownIdleBluetooth();
 static int btMinutesOfDay(const struct tm &);
@@ -603,6 +645,42 @@ int main(int argc, char** argv) {
   assert(btProfileAddress[0] == "11:22:33:44:55:66");
   server.post("/api/settings", {{"bt_always_wait", "invalid"}}); assert(server.code == 400);
   server.post("/api/settings"); assert(server.code == 400);
+
+  // A stalled scan-completion queue blocks shutdown and therefore RF. A
+  // second service attempt retains the exact queued event instead of clearing
+  // or replacing its storage. Late acknowledgement permits a safe retry.
+  btAlwaysWaitEnabled = true;
+  serviceBluetoothSync(); assert(btPersistentWaitActive && mockScan.scanning);
+  const int beforeStallDeinits = NimBLEDevice::deinits;
+  allowHostProgress = false;
+  assert(!radioBleArbiter.requestRf()); serviceBluetoothSync();
+  assert(radioBleArbiter.bleOwned() && !radioBleArbiter.rfOwned());
+  assert(NimBLEDevice::deinits == beforeStallDeinits && !btScanControl.quiescent());
+  assert(hostEvents.size() == 1);
+  auto* retainedScanEvent = hostEvents.front();
+  const size_t queuedScanCount = submittedScanEvents.size();
+  tick += 1001; serviceBluetoothSync();
+  assert(hostEvents.size() == 1 && hostEvents.front() == retainedScanEvent);
+  assert(submittedScanEvents.size() == queuedScanCount);
+  assert(NimBLEDevice::deinits == beforeStallDeinits && !radioBleArbiter.requestRf());
+  allowHostProgress = true; tick += 1001; serviceBluetoothSync();
+  assert(!btBleInitialized && !radioBleArbiter.bleOwned() && hostEvents.empty());
+  assert(NimBLEDevice::deinits == beforeStallDeinits + 1 && btScanControl.quiescent());
+  assert(radioBleArbiter.requestRf()); radioBleArbiter.releaseRf();
+  serviceBluetoothSync(); assert(btBleInitialized && btPersistentWaitActive && mockScan.scanning);
+
+  // A host-acknowledged STOP failure must also block RF handoff, including
+  // when GAP reports inactive. Only a subsequent successful STOP can recover.
+  mockScan.scanning = false; mockScan.stopOk = false;
+  const int beforeFailedStopDeinits = NimBLEDevice::deinits;
+  assert(!radioBleArbiter.requestRf()); serviceBluetoothSync();
+  assert(!btScanControl.quiescent() && radioBleArbiter.bleOwned());
+  assert(NimBLEDevice::deinits == beforeFailedStopDeinits && !radioBleArbiter.requestRf());
+  mockScan.stopOk = true; tick += 1001; serviceBluetoothSync();
+  assert(!radioBleArbiter.bleOwned() && NimBLEDevice::deinits == beforeFailedStopDeinits + 1);
+  assert(radioBleArbiter.requestRf()); radioBleArbiter.releaseRf();
+  serviceBluetoothSync(); assert(btBleInitialized && btPersistentWaitActive);
+  server.post("/api/settings", {{"bt_always_wait", "false"}}); assert(server.code == 200);
   trustedClock = false;
   server.post("/api/bluetooth-sync"); assert(server.code == 503);
   server.post("/api/bluetooth-pair"); assert(server.code == 503);
@@ -618,7 +696,7 @@ class BluetoothWorkflowTest(unittest.TestCase):
         scan = balanced_block(source, scan_start) + ';'
         names = ['btWatchNameMatches', 'clearBtDiscovery', 'consumeBtDiscovery',
                  'cancelBtResponse', 'radioScheduleActiveNow', 'bluetoothActivityPresent',
-                 'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
+                 'bluetoothScanMayStart', 'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
                  'bluetoothControllerNeeded', 'shutdownIdleBluetooth',
                  'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'attemptBluetoothSync', 'serviceBluetoothSync',

@@ -1,0 +1,255 @@
+--- V4.10
++++ V4.11
+@@ -1,5 +1,5 @@
+ //
+-// RadioClock_V4_10.ino
++// RadioClock_V4_11.ino
+ // Based on RadioClock_JJY40_HWTimer_Validated_V2.7; Casio time-only BLE protocol selection.
+ // Retains V2.7 RF timing, encoding, timezone, LittleFS, Wi-Fi power and flash-wear improvements.
+ // Scheduled watch-initiated BLE: GW-BX5600 MIP, Standard digital/hybrid, and experimental analogue time-only.
+@@ -37,6 +37,7 @@
+ // V4.8: Wi-Fi provisioning/NTP recovery and clearer watch delivery.
+ // V4.9: safe SNTP shutdown before the first TCP/IP startup.
+ // V4.10: stable setup SSID, checked AP readiness and failed-start recovery.
++// V4.11: host-serialized BLE scans and length-preserving font updates before TIME.
+ 
+ // Using software radio on ESP32/ESP32-C3.
+ //
+@@ -95,6 +96,7 @@
+ #endif
+ 
+ #include "RadioBleArbiter.h"
++#include "RadioBleScanControl.h"
+ #include "CasioBxProtocol.h"
+ #include "CasioWatchSettings.h"
+ #include "esp_bt.h"
+@@ -116,7 +118,7 @@
+ 
+ // Configuration Constants
+ #define DEVICENAME_PREFIX "RadioStation"     // Device name prefix for WiFi AP mode
+-#define FIRMWARE_VERSION "V4.10"
++#define FIRMWARE_VERSION "V4.11"
+ #define FIRMWARE_BUILD "R1"
+ 
+ #define DEFAULT_TZ_NAME "Asia/Tokyo"
+@@ -2506,6 +2508,12 @@
+ static int btDeferredSlot = -1;
+ static unsigned long btShutdownRetryMillis = 0;
+ static bool btInitFailed = false;
++static RadioBleScanControl btScanControl;
++
++static bool bluetoothScanMayStart(void) {
++  return btBleInitialized && btWindowActive && !btBleBusy &&
++         !bleOperationCancelled() && radioBleArbiter.bleOwned();
++}
+ 
+ // In NimBLE 2.5.1, init() may return false after enabling the controller but
+ // before starting the host. deinit() is then a no-op. Clean up that exact
+@@ -2556,6 +2564,15 @@
+   btScan->setInterval(80);
+   btScan->setWindow(60);
+   btScan->setMaxResults(0);
++  // One-second scan completion reports advertisers lacking a response. Avoid
++  // a second timeout callout that could outlive a controller restart.
++  btScan->setScanResponseTimeout(0);
++  if (!btScanControl.initialize(btScan, BT_SCAN_SLICE_MS, bluetoothScanMayStart)) {
++    btLastSyncStatus = "Bluetooth scan control initialization failed";
++    btRadioSuspendRequested = true;
++    Serial.println("ERROR: Bluetooth scan control unavailable; RF remains gated");
++    return;
++  }
+   Serial.println("BT: NimBLE Casio time-only service ready");
+ }
+ 
+@@ -2573,10 +2590,10 @@
+   stopBluetoothWindow();
+   cancelBtResponse();
+   disconnectGShock();
+-  if (!btClientQuiescent()) {
+-    btLastSyncStatus = "RF blocked: Bluetooth disconnect teardown did not finish";
++  if (!btScanControl.quiescent() || !btClientQuiescent()) {
++    btLastSyncStatus = "RF blocked: Bluetooth scan/disconnect teardown did not finish";
+     setBluetoothPhase("Bluetooth shutdown failed; RF off");
+-    Serial.println("ERROR: BLE disconnect teardown incomplete; LF carrier remains OFF");
++    Serial.println("ERROR: BLE scan/disconnect teardown incomplete; LF carrier remains OFF");
+     btShutdownRetryMillis = millis() + 1000;
+     return;
+   }
+@@ -2597,6 +2614,7 @@
+   }
+   btShutdownRetryMillis = 0;
+   btInitFailed = false;
++  btScanControl.releaseAfterHostStop();
+   btSuspendedByRadio = true;
+   btRadioSuspendRequested = false;
+   radioBleArbiter.finishBleShutdown(true);
+@@ -2727,7 +2745,8 @@
+ 
+ void stopBluetoothWindow(void) {
+   btWindowActive = false;
+-  if (btScan && btBleInitialized && btScan->isScanning()) btScan->stop();
++  if (btBleInitialized && !btScanControl.stop())
++    Serial.println("BT: scan stop not acknowledged; retaining host/controller ownership");
+   clearBtDiscovery();
+   btSyncActiveSlot = -1;
+   btPairModeActive = false;
+@@ -3057,14 +3076,30 @@
+ 
+ static bool requestBluetoothBasicSettings(NimBLERemoteCharacteristic *request,
+                                           uint8_t *reply, size_t &size) {
++  size = 0;
++  if (!request || !reply || bleOperationCancelled() ||
++      !btClientPreemptionEnabled.load(std::memory_order_acquire) ||
++      !btClientConnected.load(std::memory_order_acquire)) return false;
+   const uint8_t command[] = {CasioWatchSettings::kBasicHeader};
+   prepareBtResponse(command[0]);
+   if (!writeBt(request, command, sizeof(command), request->canWrite())) {
+     cancelBtResponse(); return false;
+   }
+-  if (!waitBt(CasioWatchSettings::kBasicSize)) return false;
++  if (!waitBt(CasioWatchSettings::kBxBasicSize)) return false;
++  // Both observed layouts are complete packets. Reject excess bytes before
++  // copying so a truncated prefix can never pass as a valid settings reply.
++  portENTER_CRITICAL(&btResponseMux);
++  const size_t received = btResponseLength;
++  const bool overflow = btResponseOverflow;
++  portEXIT_CRITICAL(&btResponseMux);
++  if (overflow || !CasioWatchSettings::validBasicSize(received) ||
++      bleOperationCancelled() ||
++      !btClientPreemptionEnabled.load(std::memory_order_acquire) ||
++      !btClientConnected.load(std::memory_order_acquire)) return false;
+   size = copyBt(reply, BT_RESPONSE_CAPACITY);
+-  return size == CasioWatchSettings::kBasicSize && reply[0] == command[0];
++  Serial.printf("BT: %s response header=0x%02x bytes=%u\n", btGattStage,
++                size ? reply[0] : 0, (unsigned)size);
++  return size == received && reply[0] == command[0];
+ }
+ 
+ static bool applyBluetoothWatchFont(void) {
+@@ -3074,25 +3109,47 @@
+                 btPairModeActive ? String("") : btProfileName[btActiveProfile];
+   name.toUpperCase();
+   if (name.indexOf("GW-BX5600") < 0 || !btService || !btSetChar) {
+-    btFontLastStatus = "Font skipped: a GW-BX5600 must be identified"; return false;
+-  }
+-  btFontLastStatus = "Font update failed; time delivery is retained";
+-  btGattStage = "BX font basic settings";
++    btFontLastStatus = "Font skipped: a GW-BX5600 must be identified";
++    Serial.println(btFontLastStatus);
++    return false;
++  }
++  const auto ready = []() {
++    return !bleOperationCancelled() &&
++           btClientPreemptionEnabled.load(std::memory_order_acquire) &&
++           btClientConnected.load(std::memory_order_acquire);
++  };
++  const auto failed = [](const char *reason) {
++    btFontLastStatus = String("Font update failed at ") + btGattStage + ": " + reason;
++    Serial.println(btFontLastStatus);
++    return false;
++  };
++  btGattStage = "BX font discovery";
++  if (!ready()) return failed("watch disconnected or RF cancelled the operation");
+   auto request = btService->getCharacteristic(NimBLEUUID(CASIO_BASIC_REQUEST_CHAR));
+-  if (!request || (!request->canWrite() && !request->canWriteNoResponse())) return false;
++  if (!ready()) return failed("watch disconnected or RF cancelled the operation");
++  if (!request || (!request->canWrite() && !request->canWriteNoResponse()))
++    return failed("basic-settings request characteristic unavailable");
++  btGattStage = "BX font subscription";
+   bool subscribed = false;
+   if (btSetChar->canNotify()) subscribed = btSetChar->subscribe(true, gshockNotifyCallback, true);
+   else if (btSetChar->canIndicate()) subscribed = btSetChar->subscribe(false, gshockNotifyCallback, true);
+-  if (!subscribed || bleOperationCancelled()) return false;
++  if (!ready()) return failed("watch disconnected or RF cancelled the operation");
++  if (!subscribed) return failed("settings notification subscription rejected");
+   uint8_t reply[BT_RESPONSE_CAPACITY], packet[CasioWatchSettings::kBasicSize];
+   size_t size = 0;
++  btGattStage = "BX font read settings";
+   if (!requestBluetoothBasicSettings(request, reply, size) ||
+-      !CasioWatchSettings::buildFont(reply, size, mode, packet, sizeof(packet))) return false;
+-  if (memcmp(reply, packet, sizeof(packet)) != 0) {
+-    if (!writeBt(btSetChar, packet, sizeof(packet), true)) return false;
++      !CasioWatchSettings::buildFont(reply, size, mode, packet, sizeof(packet)))
++    return failed("missing, incomplete or unsupported settings reply");
++  if (memcmp(reply, packet, size) != 0) {
++    const size_t writtenSize = size;
++    btGattStage = "BX font write settings";
++    if (!writeBt(btSetChar, packet, writtenSize, true))
++      return failed("settings write was not acknowledged");
++    btGattStage = "BX font readback";
+     if (!requestBluetoothBasicSettings(request, reply, size) ||
+-        (reply[8] & CasioWatchSettings::kClassicMask) !=
+-        (packet[8] & CasioWatchSettings::kClassicMask)) return false;
++        size != writtenSize || memcmp(reply, packet, writtenSize) != 0)
++      return failed("settings readback did not match the requested font packet");
+   }
+   btFontLastStatus = String("Watch ") + (btActiveProfile + 1) + ": " +
+                      (mode == 2 ? "Classic" : "Standard (new)") +
+@@ -3149,6 +3206,10 @@
+     }
+     if (!writeBt(btSpData, r, n3, true)) break;
+ 
++    // A watch-triggered time session can close immediately after TIME is
++    // acknowledged. Apply optional settings first; a font failure alone must
++    // not prevent a time attempt. Sample time only after this optional work.
++    applyBluetoothWatchFont();
+     struct timeval tv;
+     gettimeofday(&tv, nullptr);
+     time_t epoch = tv.tv_sec;
+@@ -3170,9 +3231,6 @@
+     Serial.printf("BT: GW-BX5600 time command delivered %04d-%02d-%02d %02d:%02d:%02d\n",
+                   year, local.tm_mon+1, local.tm_mday,
+                   local.tm_hour, local.tm_min, local.tm_sec);
+-    // Font settings use a separate read/modify/write after time delivery.
+-    // Failure must not erase the evidence that the time command succeeded.
+-    applyBluetoothWatchFont();
+   } while (false);
+ 
+   disconnectGShock();
+@@ -3269,6 +3327,11 @@
+   if (btBleBusy || !btClientQuiescent() ||
+       (btShutdownRetryMillis && (long)(millis() - btShutdownRetryMillis) < 0)) return false;
+   stopBluetoothWindow();
++  if (!btScanControl.quiescent()) {
++    btShutdownRetryMillis = millis() + 1000;
++    setBluetoothPhase("Bluetooth scan shutdown pending");
++    return false;
++  }
+   releaseBtClientBarrier();
+   const bool stopped = NimBLEDevice::isInitialized() ? NimBLEDevice::deinit(false)
+                                                     : stopPartiallyInitializedBluetooth();
+@@ -3281,6 +3344,7 @@
+     return false; // Retain ownership until the physical controller is off.
+   }
+   btShutdownRetryMillis = 0;
++  btScanControl.releaseAfterHostStop();
+   radioBleArbiter.finishBleShutdown(true);
+   setBluetoothPhase("Bluetooth idle power saving");
+   Serial.println("BT: host/controller OFF between listening windows");
+@@ -3362,7 +3426,10 @@
+     }
+     String discoveredName, discoveredAddress; uint8_t discoveredType = 0xFF;
+     if (consumeBtDiscovery(discoveredName, discoveredAddress, discoveredType)) {
+-      if (btScan && btScan->isScanning()) btScan->stop();
++      if (!btScanControl.stop()) {
++        btLastSyncStatus = "Bluetooth scan teardown pending; connection deferred";
++        return;
++      }
+       btLastWatchName = discoveredName;
+       btLastWatchAddress = discoveredAddress;
+       btLastWatchAddressType = discoveredType;
+@@ -3384,7 +3451,7 @@
+       return;
+     }
+     if (btScan && !bleOperationCancelled() && !btScan->isScanning()) {
+-      if (!btScan->start(BT_SCAN_SLICE_MS, false, true)) {
++      if (!btScanControl.start()) {
+         btLastSyncStatus = "Bluetooth scan start failed";
+         setBluetoothPhase("Waiting for watch");
+       } else if (!btPairModeActive && btSyncActiveSlot < 0) setBluetoothPhase("Scanning");
+@@ -4830,4 +4897,4 @@
+ }
+ //...................................................................
+ // End of file
+-// Firmware Version: V4.10
++// Firmware Version: V4.11

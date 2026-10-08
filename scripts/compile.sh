@@ -20,9 +20,9 @@ fi
 # The sketch-local partitions.csv selects the 3 MB app / 4 MB flash layout.
 fqbn="${RADIOCLOCK_FQBN:-esp32:esp32:esp32:FlashSize=4M,PartitionScheme=huge_app}"
 jobs="${RADIOCLOCK_BUILD_JOBS:-2}"
-sketch="$repo_dir/firmware/RadioClock_V4_10"
-build_dir="$tools_dir/build/RadioClock_V4_10"
-output_dir="$tools_dir/output/RadioClock_V4_10"
+sketch="$repo_dir/firmware/RadioClock_V4_11"
+build_dir="$tools_dir/build/RadioClock_V4_11"
+output_dir="$tools_dir/output/RadioClock_V4_11"
 mkdir -p "$build_dir" "$output_dir"
 
 exec "$cli" compile --fqbn "$fqbn" --jobs "$jobs" \
