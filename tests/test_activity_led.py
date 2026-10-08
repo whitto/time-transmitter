@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the shipped LED task, rollover-safe cadence and flash settings."""
+"""Exercise shipped BT-only LED flashing, 24-hour success state and settings."""
 import re
 import shutil
 import subprocess
@@ -19,14 +19,22 @@ LED_MOCKS = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <ctime>
 #include <functional>
 #include <vector>
 #include "RadioBleArbiter.h"
+#include "BtSyncLed.h"
 constexpr int NUM_STATIONS = 7, PIN_ONBOARD_LED = 2, HIGH = 1, LOW = 0;
 std::atomic<bool> carrierReady{false}, radioPaused{false}, rfSilenceFailed{false};
 std::atomic<bool> btBleBusy{false}, activityLedEnabled{true};
+std::atomic<uint32_t> btLastSyncEpoch{0};
+std::atomic<bool> btLastOutcomeSuccessful{false};
 std::atomic<int> last_station{-1};
 RadioBleArbiter radioBleArbiter;
+time_t fakeUtc = 1700000000;
+time_t mockTime(time_t *out) { if (out) *out = fakeUtc; return fakeUtc; }
+#define time mockTime
 uint32_t tick = 0;
 uint32_t millis() { return tick; }
 struct Edge { uint32_t when; bool high; };
@@ -54,24 +62,46 @@ static void runTask() {
   assert(delays == stopAfter);
 }
 int main() {
+  constexpr int64_t success = 1700000000;
+  assert(BtSyncLed::successEligible(success, success, true));
+  assert(BtSyncLed::successEligible(success + 86399, success, true));
+  assert(!BtSyncLed::successEligible(success + 86400, success, true));
+  assert(!BtSyncLed::successEligible(success + 86401, success, true));
+  assert(!BtSyncLed::successEligible(success + 1, success, false));
+  assert(!BtSyncLed::successEligible(success - 1, success, true));
+  assert(!BtSyncLed::successEligible(0, success, true));
+  assert(!BtSyncLed::successEligible(success, 0, true));
+  assert(!BtSyncLed::successEligible(1577836799, 1577836799, true));
+  assert(BtSyncLed::successEligible(1577836800, 1577836800, true));
+  assert(!BtSyncLed::successEligible(INT64_MAX, success, true));
+
   uint32_t anchor = 0; bool level = false, wasActive = false;
-  assert(!activityLedLevel(100, true, false, anchor, level, wasActive));
-  assert(activityLedLevel(120, true, true, anchor, level, wasActive)); // Immediate visible short-BT pulse.
-  assert(activityLedLevel(219, true, true, anchor, level, wasActive));
-  assert(!activityLedLevel(220, true, false, anchor, level, wasActive));
-  assert(activityLedLevel(300, true, true, anchor, level, wasActive));
-  assert(!activityLedLevel(550, true, true, anchor, level, wasActive));
-  assert(activityLedLevel(800, true, true, anchor, level, wasActive));
-  assert(activityLedLevel(1300, true, true, anchor, level, wasActive)); // Two elapsed phases retain phase.
-  assert(!activityLedLevel(1301, false, true, anchor, level, wasActive));
-  assert(activityLedLevel(1302, true, true, anchor, level, wasActive)); // Re-enable during activity.
-  assert(!activityLedLevel(1303, true, false, anchor, level, wasActive));
+  assert(!activityLedLevel(100, true, false, false, anchor, level, wasActive));
+  assert(activityLedLevel(120, true, true, false, anchor, level, wasActive)); // Immediate visible short-BT pulse.
+  assert(activityLedLevel(219, true, true, false, anchor, level, wasActive));
+  assert(!activityLedLevel(220, true, false, false, anchor, level, wasActive));
+  assert(activityLedLevel(300, true, true, false, anchor, level, wasActive));
+  assert(!activityLedLevel(550, true, true, false, anchor, level, wasActive));
+  assert(activityLedLevel(800, true, true, false, anchor, level, wasActive));
+  assert(activityLedLevel(1300, true, true, false, anchor, level, wasActive)); // Two elapsed phases retain phase.
+  assert(!activityLedLevel(1301, false, true, true, anchor, level, wasActive));
+  assert(activityLedLevel(1302, true, true, true, anchor, level, wasActive)); // Re-enable during activity.
+  assert(!activityLedLevel(1303, true, false, false, anchor, level, wasActive));
+  assert(activityLedLevel(1400, true, false, true, anchor, level, wasActive)); // Successful idle state is solid.
+  assert(activityLedLevel(4000, true, false, true, anchor, level, wasActive));
+  assert(!wasActive && level);
+  assert(!activityLedLevel(4001, false, false, true, anchor, level, wasActive));
+  assert(activityLedLevel(4002, true, false, true, anchor, level, wasActive));
+  assert(activityLedLevel(4003, true, true, true, anchor, level, wasActive));
+  assert(!activityLedLevel(4253, true, true, true, anchor, level, wasActive)); // New sync flashes even after success.
+  assert(activityLedLevel(4254, true, false, true, anchor, level, wasActive)); // Success restores solid.
+  assert(!activityLedLevel(4255, true, false, false, anchor, level, wasActive)); // Failure cancels success hold.
   wasActive = false;
-  assert(activityLedLevel(UINT32_MAX - 100U, true, true, anchor, level, wasActive));
-  assert(!activityLedLevel(149U, true, true, anchor, level, wasActive));
+  assert(activityLedLevel(UINT32_MAX - 100U, true, true, false, anchor, level, wasActive));
+  assert(!activityLedLevel(149U, true, true, false, anchor, level, wasActive));
   assert(anchor == 149U);
-  assert(activityLedLevel(399U, true, true, anchor, level, wasActive));
-  assert(!activityLedLevel(1149U, true, true, anchor, level, wasActive));
+  assert(activityLedLevel(399U, true, true, false, anchor, level, wasActive));
+  assert(!activityLedLevel(1149U, true, true, false, anchor, level, wasActive));
 
   assert(!activityLedSyncActive()); // Wi-Fi/AP or passive listening has no activity flags.
   btBleBusy = true; assert(activityLedSyncActive());
@@ -79,7 +109,7 @@ int main() {
   assert(radioBleArbiter.requestRf());
   assert(!activityLedSyncActive()); // Ownership alone is not a configured transmission.
   last_station = 0; assert(!activityLedSyncActive());
-  carrierReady = true; assert(activityLedSyncActive());
+  carrierReady = true; assert(!activityLedSyncActive()); // Actual RF never flashes the blue LED.
   radioPaused = true; assert(!activityLedSyncActive());
   radioPaused = false; rfSilenceFailed = true; assert(!activityLedSyncActive());
   rfSilenceFailed = false; last_station = NUM_STATIONS; assert(!activityLedSyncActive());
@@ -92,7 +122,11 @@ int main() {
   assert(edges.size() == 4 && edges[0].when == 0 && edges[0].high);
   assert(edges[1].when == 250 && !edges[1].high && edges[2].when == 500 && edges[2].high && edges[3].when == 750 && !edges[3].high);
   btBleBusy = false; tick = 0; runTask(); assert(edges.empty()); // Listening remains dark.
-  assert(radioBleArbiter.requestRf()); tick = 0; runTask(); assert(edges.size() == 4);
+  assert(radioBleArbiter.requestRf()); tick = 0; runTask(); assert(edges.empty());
+  btLastSyncEpoch = static_cast<uint32_t>(success); btLastOutcomeSuccessful = true;
+  fakeUtc = success + 60; assert(activityLedSuccessEligible());
+  tick = 0; runTask(); assert(edges.size() == 1 && edges[0].high && pinLevel == HIGH); // Solid continues throughout RF.
+  assert(radioBleArbiter.rfOwned() && carrierReady && last_station == 0);
   activityLedEnabled = false; tick = 0; runTask(); assert(edges.empty()); // RF is unaffected.
   assert(radioBleArbiter.rfOwned() && carrierReady && last_station == 0);
   activityLedEnabled = true;
@@ -103,12 +137,25 @@ int main() {
   assert(radioBleArbiter.rfOwned());
   activityLedEnabled = true;
   duringDelay = [] { if (tick == 100) radioPaused = true; };
-  tick = 0; runTask(); assert(edges.size() == 2 && edges[1].when == 100 && !edges[1].high);
+  tick = 0; runTask(); assert(edges.size() == 1 && edges[0].high); // RF pause also leaves the success indicator steady.
   radioPaused = false; radioBleArbiter.releaseRf();
   btBleBusy = true;
-  duringDelay = [] { if (tick == 100) btBleBusy = false; };
+  duringDelay = [] { if (tick == 100) { btBleBusy = false; btLastOutcomeSuccessful = false; } };
   tick = 0; runTask(); assert(edges.size() == 2 && edges[1].when == 100 && !edges[1].high);
-  std::puts("Actual LED task flashes RF/blocked Bluetooth only; off, idle, cancel and millis rollover passed");
+  btBleBusy = true;
+  duringDelay = [] { if (tick == 100) { btLastSyncEpoch = static_cast<uint32_t>(fakeUtc); btLastOutcomeSuccessful = true; btBleBusy = false; } };
+  tick = 0; runTask(); assert(edges.size() == 1 && edges[0].high); // Success becomes solid without an off pulse.
+  duringDelay = [] { if (tick == 100) fakeUtc = static_cast<time_t>(btLastSyncEpoch.load()) + 86400; };
+  tick = 0; runTask(); assert(edges.size() == 2 && edges[1].when == 100 && !edges[1].high);
+  fakeUtc = 0; assert(!activityLedSuccessEligible());
+  duringDelay = [] { if (tick == 100) fakeUtc = static_cast<time_t>(btLastSyncEpoch.load()) + 60; };
+  tick = 0; runTask(); assert(edges.size() == 1 && edges[0].when == 100 && edges[0].high); // Reboot waits for a plausible UTC clock.
+  duringDelay = nullptr;
+  for (const char *zone : {"JST-9", "AEST-10", "EST5EDT"}) {
+    assert(setenv("TZ", zone, 1) == 0); tzset();
+    assert(activityLedSuccessEligible());
+  }
+  std::puts("Actual LED task: BT-only flashing, 24-hour UTC success, failure/off override, RF isolation and rollover passed");
 }
 '''
 
@@ -148,7 +195,10 @@ int main() {
   btTimezoneName = "Asia/Tokyo"; btTimeOffsetMinutes = 30;
   activityLedEnabled = false; assert(writeConfigNow());
   auto newConfig = flash.at(CONFIG_FILE);
-  for (int i = 0; i < 6; ++i) newConfig.erase(newConfig.rfind('\n', newConfig.size() - 2) + 1);
+  const std::string lastLegacyFields = "\nAsia/Tokyo\n30\n";
+  const auto legacyEnd = newConfig.rfind(lastLegacyFields);
+  assert(legacyEnd != std::string::npos);
+  newConfig.erase(legacyEnd + lastLegacyFields.size());
   flash[CONFIG_FILE] = newConfig;
   activityLedEnabled = false; btTimezoneName = "Europe/London"; btTimeOffsetMinutes = 0;
   loadConfig(); assert(activityLedEnabled && btTimezoneName == "Asia/Tokyo" && btTimeOffsetMinutes == 30);
@@ -194,7 +244,7 @@ class ActivityLedTest(unittest.TestCase):
     def test_real_led_task_and_activity(self):
         source = FIRMWARE.read_text()
         functions = '\n'.join(workflow.extract_function(source, name) for name in
-                              ['activityLedLevel', 'activityLedSyncActive', 'activityLedTask'])
+                              ['activityLedLevel', 'activityLedSyncActive', 'activityLedSuccessEligible', 'activityLedTask'])
         self.compile_and_run(LED_MOCKS + functions + LED_DRIVER)
 
     def test_saved_led_and_default_bt_settings(self):

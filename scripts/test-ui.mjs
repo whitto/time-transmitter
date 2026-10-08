@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.12', radio_active: false, station: -1,
+  firmware_version: 'V4.13', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -90,11 +90,13 @@ const fetch = async (url, options = {}) => {
       return response({ status: 'error', message: led ? 'LED setting could not be saved' : 'Rejected setting' }, led ? 500 : 409);
     }
     for (const [key, value] of Object.entries(fields)) {
-      if (['bt_always_wait', 'activity_led_enabled', 'bt_idle_power_save'].includes(key)) state[key] = value === '1';
-      else if (['wifi_power_mode', 'bt_manual_profile', 'bt_manual_protocol'].includes(key)) state[key] = Number(value);
+      if (['bt_always_wait', 'activity_led_enabled', 'bt_idle_power_save', 'bt_history_persist', 'wifi_access_enabled'].includes(key)) state[key] = value === '1';
+      else if (['wifi_power_mode', 'bt_manual_profile', 'bt_manual_protocol', 'wifi_access_start', 'wifi_access_end'].includes(key)) state[key] = Number(value);
       else if (key === 'bt_time_offset_minutes') state[key] = Number(value);
+      else if (key === 'wifi_access_timezone') state[key] = value;
       else if (key === 'bt_timezone') state[key] = value;
     }
+    if (fields.wifi_access_enabled === '1') state.wifi_power_mode = 1;
     if (Object.hasOwn(fields, 'bt_font_profile')) state.bt_profiles.find(p=>Number(p.id)===Number(fields.bt_font_profile)).font_mode=Number(fields.bt_font_mode);
     if (Object.hasOwn(fields, 'bt_slot')) {
       const slot = state.bt_times[Number(fields.bt_slot)];
@@ -123,7 +125,7 @@ const fetch = async (url, options = {}) => {
   }
   if (url === '/api/stations') return response([{ id: 0, name: 'JJY', encoding: 'JJY 40 kHz' }]);
   if (url === '/api/schedules') return response([]);
-  if (url === '/api/diagnostics') return response({ wifi_connected: true, radio_active: false, heap_free: 100000 });
+  if (url === '/api/diagnostics') return response({ ...state, ...status, wifi_connected: true, heap_free: 100000, bt_connection_attempts: 12, bt_acked_writes: 30, bt_notifications: 20, bt_response_errors: 2 });
   if (url === '/api/bluetooth-sync' && method === 'POST') {
     state.bt_state = 'Waiting for watch';
     return response({ message: 'Manual window restarted' });
@@ -150,9 +152,9 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.12');
+assert.equal(element('fw').textContent, 'V4.13');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
-assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
+assert.equal(element('activityLedStatus').textContent, 'BT sync indicator');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
 assert.equal(element('watchStatus').textContent, 'Time sync delivered');
 // Battery estimates follow the selected watch, retain 0%, and never replace
@@ -160,6 +162,7 @@ assert.equal(element('watchStatus').textContent, 'Time sync delivered');
 assert.equal(element('quickWatchBattery').textContent, 'Battery: unavailable · Watch 1');
 assert.equal(element('watchBattery').textContent, 'Unavailable · Watch 1');
 assert.equal(element('watchBatteryReadAt').textContent, 'Not read since restart');
+assert.match(html,/Shows the last reading from a Bluetooth sync; kept in RAM and cleared on restart/);
 const originalProfiles = structuredClone(state.bt_profiles);
 const batterySample = '2026-10-06 22:15:38';
 state.bt_profiles = [
@@ -323,7 +326,7 @@ await evaluate('setActivityLed(true)');
 releaseConfig(); await staleLedConfig;
 assert.equal(state.activity_led_enabled, true);
 assert.equal(element('activityLedEnabled').checked, true, 'a stale config read must not revert a later LED save');
-assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
+assert.equal(element('activityLedStatus').textContent, 'BT sync indicator');
 await evaluate('loadConfig()');
 assert.equal(element('activityLedEnabled').checked, true, 'saved LED On must survive configuration reload');
 
@@ -332,7 +335,7 @@ await evaluate('setActivityLed(false)');
 assert.equal(state.activity_led_enabled, true);
 assert.equal(element('activityLedEnabled').checked, true, 'failed LED storage write must restore the saved preference');
 assert.equal(element('activityLedEnabled').disabled, false);
-assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
+assert.equal(element('activityLedStatus').textContent, 'BT sync indicator');
 assert.equal(element('toast').textContent, 'LED setting could not be saved');
 state.activity_led_enabled = false;
 await evaluate('tick()');
@@ -441,6 +444,94 @@ failNextSettings=true;await evaluate('setBtIdlePowerSave(false)');
 assert.equal(element('btIdlePowerSave').checked,true);
 await evaluate('setBtAlwaysWait(true)');assert.equal(element('btPowerStatus').textContent,'Paused by Always Wait');
 await evaluate('loadConfig()');assert.equal(element('btIdlePowerSave').checked,true);
+// Mode writes and grouped daily-window saves cannot conflict in the UI.
+deferNextSetting=true;const pendingWifiMode=evaluate('setWifiPowerMode(0)');
+assert.equal(element('wifiAccessEnabled').disabled,true);
+assert.equal(element('wifiAccessSave').disabled,true);
+releaseSetting();await pendingWifiMode;
+assert.equal(element('wifiAccessEnabled').disabled,false);
+assert.equal(element('wifiAccessSave').disabled,false);
+
+// Daily history is a durable preference, while polling never writes snapshots.
+assert.equal(element('btHistoryPersist').checked,true);
+const historyRequestStart=requests.length;
+await evaluate('setBtHistoryPersist(false)');
+assert.deepEqual(requests.slice(historyRequestStart).find(r=>r.method==='POST'),{url:'/api/config',method:'POST',fields:{bt_history_persist:'0'}});
+assert.equal(element('btHistoryPersist').checked,false);
+assert.equal(element('btHistoryPersistStatus').textContent,'RAM only');
+await evaluate('loadConfig()');assert.equal(element('btHistoryPersist').checked,false);
+failNextSettings=true;await evaluate('setBtHistoryPersist(true)');
+assert.equal(element('btHistoryPersist').checked,false,'rejected persistence preference rolls back immediately');
+deferNextStatus=true;const staleHistory=evaluate('tick()');
+await evaluate('setBtHistoryPersist(true)');releaseStatus();await staleHistory;
+assert.equal(element('btHistoryPersist').checked,true,'late pre-save status cannot undo a history preference');
+deferNextConfig=true;const staleHistoryConfig=evaluate('loadConfig()');
+await evaluate('setBtHistoryPersist(false)');releaseConfig();await staleHistoryConfig;
+assert.equal(element('btHistoryPersist').checked,false,'late config cannot undo a history preference');
+await evaluate('setBtHistoryPersist(true)');
+deferNextSetting=true;const pendingHistory=evaluate('setBtHistoryPersist(false)');
+assert.equal(element('btHistoryPersist').disabled,true);
+assert.equal(element('btHistoryPersistStatus').textContent,'Saving…');
+await evaluate('loadConfig()');await evaluate('renderStatus({...lastStatus,bt_history_persist:true})');
+assert.equal(element('btHistoryPersist').checked,false,'reads during a pending write keep the visible choice');
+releaseSetting();await pendingHistory;
+assert.equal(element('btHistoryPersist').disabled,false);
+state.bt_history_saved_at='2026-10-09 06:30:17';state.bt_history_save_status='Saved first success today';
+await evaluate('tick()');
+assert.equal(element('btHistorySavedAt').textContent,state.bt_history_saved_at);
+assert.equal(element('btHistorySaveStatus').textContent,state.bt_history_save_status);
+
+// Independent daily Wi-Fi windows save one validated set, accept overnight,
+// switch to Power-save, retain drafts on polling and roll back failed saves.
+assert.equal(element('wifiAccessEnabled').checked,false);
+assert.equal(element('wifiAccessStart').value,'18:00');
+assert.equal(element('wifiAccessTimezone').value,'Australia/Brisbane');
+await evaluate('setWifiPowerMode(0)');
+element('wifiAccessEnabled').checked=true;element('wifiAccessStart').value='22:30';element('wifiAccessEnd').value='01:15';element('wifiAccessTimezone').value='Asia/Tokyo';
+const accessRequestStart=requests.length;await evaluate('saveWifiAccess()');
+assert.deepEqual(requests.slice(accessRequestStart).find(r=>r.method==='POST'),{url:'/api/config',method:'POST',fields:{wifi_access_enabled:'1',wifi_access_start:'1350',wifi_access_end:'75',wifi_access_timezone:'Asia/Tokyo'}});
+assert.equal(state.wifi_power_mode,1);
+assert.equal(element('wifiKeepOn').checked,false);
+assert.equal(element('wifiAccessStatus').textContent,'Scheduled daily');
+await evaluate('loadConfig()');assert.equal(element('wifiAccessStart').value,'22:30');
+await evaluate('setWifiPowerMode(0)');assert.equal(element('wifiAccessStatus').textContent,'Overridden by Always on');
+element('wifiAccessStart').value='23:00';await evaluate('markWifiAccessDraft()');await evaluate('tick()');
+assert.equal(element('wifiAccessStart').value,'23:00','polling must preserve a Wi-Fi schedule draft');
+assert.equal(element('wifiAccessStatus').textContent,'Unsaved changes');
+element('wifiAccessEnd').value='23:00';const invalidAccessPosts=requests.filter(r=>r.method==='POST').length;
+await evaluate('saveWifiAccess()');assert.equal(requests.filter(r=>r.method==='POST').length,invalidAccessPosts,'equal start/end rejected before API');
+element('wifiAccessEnd').value='02:00';failNextSettings=true;await evaluate('saveWifiAccess()');
+assert.equal(element('wifiAccessStart').value,'22:30','rejected grouped save restores the saved window');
+assert.equal(element('wifiAccessEnd').value,'01:15');assert.equal(element('wifiKeepOn').checked,true);
+deferNextStatus=true;const staleAccess=evaluate('tick()');
+element('wifiAccessStart').value='21:00';element('wifiAccessEnd').value='03:00';await evaluate('saveWifiAccess()');
+releaseStatus();await staleAccess;assert.equal(element('wifiAccessStart').value,'21:00');assert.equal(element('wifiKeepOn').checked,false);
+deferNextConfig=true;const staleAccessConfig=evaluate('loadConfig()');
+element('wifiAccessEnabled').checked=false;await evaluate('saveWifiAccess()');releaseConfig();await staleAccessConfig;
+assert.equal(element('wifiAccessEnabled').checked,false);assert.equal(element('wifiKeepOn').checked,false,'disabling window leaves Power-save unchanged');
+element('wifiAccessEnabled').checked=true;deferNextSetting=true;const pendingAccess=evaluate('saveWifiAccess()');
+assert.equal(element('wifiAccessSave').disabled,true);assert.equal(element('wifiKeepOn').disabled,true);
+await evaluate('loadConfig()');assert.equal(element('wifiAccessEnabled').checked,true);
+releaseSetting();await pendingAccess;assert.equal(element('wifiAccessSave').disabled,false);
+assert.equal(element('wifiKeepOn').disabled,false);
+
+// Tile state uses the whole RF session, including a reduced/zero envelope.
+evaluate('renderStatus({...lastStatus,radio_active:true,radio_paused:true,carrier_hz:0,wifi_connected:true,ap_mode:false,wifi_ip:"10.0.1.137"})');
+assert.equal(element('radioStatusTile').classList.contains('state-good'),true);
+assert.equal(element('wifiStatusTile').classList.contains('state-good'),true);
+assert.equal(element('heroWifi').textContent,'Connected');
+evaluate('renderStatus({...lastStatus,radio_active:false,wifi_connected:true,ap_mode:true,ap_ip:"192.168.4.1"})');
+assert.equal(element('radioStatusTile').classList.contains('state-bad'),true);
+assert.equal(element('wifiStatusTile').classList.contains('state-bad'),true,'AP+STA remains red');
+assert.equal(element('heroWifi').textContent,'Setup AP');assert.equal(element('quickWifiIp').textContent,'192.168.4.1');
+evaluate('renderNetworkStatus({wifi_connected:false,ap_mode:false})');assert.equal(element('heroWifi').textContent,'Offline');
+status.bt_last_sync_epoch=1791491417;status.bt_last_outcome_successful=true;status.bt_last_sync_date='2026-10-09 06:30:17';status.bt_last_sync_status='Time write delivered';
+await evaluate('updateDiagnostics(true)');
+assert.match(element('diagnostics').textContent,/Last successful BT sync.*2026-10-09 06:30:17/);
+assert.match(element('diagnostics').textContent,/BT saved snapshot.*2026-10-09 06:30:17/);
+assert.match(element('diagnostics').textContent,/BLE connects.*12 \/ 30 \/ 20 \/ 2/);
+assert.match(element('diagnostics').textContent,/Last BT outcome: Successful/);
+console.log('V4.13 UI checks passed: history persistence toggle/rollback/races, independent overnight Wi-Fi drafts/save/power mode, live RF/AP states and restored diagnostics.');
 console.log('UI handler tests passed: font profile selection/persistence/rollback/stale reads, idle BT power saving, LED, schedules and existing sync/pair behavior.');
 
 // Diagnostics uses saved device schedules and station time, independent of BT zone.

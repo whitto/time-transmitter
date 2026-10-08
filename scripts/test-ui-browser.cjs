@@ -31,8 +31,9 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.12', station: -1, radio_active: false,
+    firmware_version: 'V4.13', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
+    wifi_connected:true,ap_mode:false,wifi_ip:'10.0.1.137',
     bt_day_complete: true, bt_pairing: false,
   };
   let holdNextStatus = false, statusHeld, releaseStatus;
@@ -41,13 +42,15 @@ const { chromium } = require('playwright');
   let holdNextLedWrite = false, ledWriteHeld, releaseLedWrite;
   let rejectNextLedWrite = false;
   let rejectNextWatchOption = false;
+  let holdNextHistoryWrite=false,historyWriteHeld,releaseHistoryWrite,rejectNextHistoryWrite=false;
+  let holdNextAccessWrite=false,accessWriteHeld,releaseAccessWrite,rejectNextAccessWrite=false;
   let holdNextConfig = false, configHeld, releaseConfig;
   try {
     browser = await chromium.launch({
       executablePath: process.env.RADIOCLOCK_CHROMIUM || '/usr/bin/chromium',
       headless: true, args: ['--no-sandbox'],
     });
-    const page = await browser.newPage();
+    const page = await browser.newPage({viewport:{width:1440,height:1000}});
     // Poll explicitly so delayed-response race checks are deterministic.
     await page.addInitScript(() => { window.setInterval = () => 0; });
     const pageErrors = [];
@@ -60,7 +63,19 @@ const { chromium } = require('playwright');
       else if (url === '/api/config') {
         if (req.method() === 'POST') {
           const fields = Object.fromEntries([...(req.postData() || '').matchAll(/name="([^"]+)"\r\n\r\n([^\r\n]*)/g)].map(x => [x[1], x[2]]));
-          if (Object.hasOwn(fields, 'bt_font_profile') || Object.hasOwn(fields, 'bt_idle_power_save')) {
+          if (Object.hasOwn(fields, 'bt_history_persist')) {
+            assert.deepEqual(Object.keys(fields),['bt_history_persist']);
+            if(holdNextHistoryWrite){holdNextHistoryWrite=false;historyWriteHeld();await new Promise(resolve=>{releaseHistoryWrite=resolve})}
+            if(rejectNextHistoryWrite){rejectNextHistoryWrite=false;code=500;data={status:'error',message:'History preference could not be saved'}}
+            else{config.bt_history_persist=fields.bt_history_persist==='1';data={status:'ok'}}
+          } else if (Object.hasOwn(fields, 'wifi_access_enabled')) {
+            assert.deepEqual(Object.keys(fields),['wifi_access_enabled','wifi_access_start','wifi_access_end','wifi_access_timezone']);
+            if(holdNextAccessWrite){holdNextAccessWrite=false;accessWriteHeld();await new Promise(resolve=>{releaseAccessWrite=resolve})}
+            if(rejectNextAccessWrite){rejectNextAccessWrite=false;code=500;data={status:'error',message:'Wi-Fi access schedule could not be saved'}}
+            else{Object.assign(config,{wifi_access_enabled:fields.wifi_access_enabled==='1',wifi_access_start:Number(fields.wifi_access_start),wifi_access_end:Number(fields.wifi_access_end),wifi_access_timezone:fields.wifi_access_timezone});if(config.wifi_access_enabled)config.wifi_power_mode=1;data={status:'ok'}}
+          } else if(Object.hasOwn(fields,'wifi_power_mode')) {
+            config.wifi_power_mode=Number(fields.wifi_power_mode);data={status:'ok'};
+          } else if (Object.hasOwn(fields, 'bt_font_profile') || Object.hasOwn(fields, 'bt_idle_power_save')) {
             if (rejectNextWatchOption) {
               rejectNextWatchOption = false; code = 500;
               data = { status: 'error', message: 'Watch option could not be saved' };
@@ -133,18 +148,19 @@ const { chromium } = require('playwright');
         data = { status: 'ok' };
       }
       else if (url === '/api/diagnostics') data = {
-        firmware:'V4.12',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
+        firmware:'V4.13',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
         heap_free:120000,heap_min_free:110000,clock_state:'Synchronized',ntp_age_sec:60,
-        ntp_sync_count:12,clock_error_est_sec:0.1,ntp_interval_sec:3600,wifi_connected:true,wifi_ip:'192.168.1.36',
-        radio_active:false,radio_paused:false,carrier_hz:0,boundary_delay_us:80,boundary_delay_worst_us:100,
+        ntp_sync_count:12,clock_error_est_sec:0.1,ntp_interval_sec:3600,wifi_connected:status.wifi_connected,wifi_ip:status.wifi_ip,
+        radio_active:status.radio_active,radio_paused:status.radio_paused||false,carrier_hz:status.carrier_hz||0,boundary_delay_us:80,boundary_delay_worst_us:100,
         missed_second_boundaries:0,littlefs_used:4096,littlefs_total:983040,bt_window_active:false,
-        bt_connection_attempts:3,bt_acked_writes:2,bt_notifications:4,bt_response_errors:0,bt_delivery_evidence:'ATT write acknowledged; watch display unverified'
+        bt_connection_attempts:3,bt_acked_writes:2,bt_notifications:4,bt_response_errors:0,bt_delivery_evidence:'ATT write acknowledged; watch display unverified',
+        bt_last_sync_date:status.bt_last_sync_date,bt_last_sync_status:status.bt_last_sync_status,bt_last_sync_epoch:1791491417,bt_last_outcome_successful:true,bt_history_persist:config.bt_history_persist,bt_history_saved_at:config.bt_history_saved_at,bt_history_save_status:config.bt_history_save_status,ap_mode:status.ap_mode,ap_ip:status.ap_ip
       };
       else if (url === '/api/bluetooth-pair') data = { message: 'Pairing window opened' };
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.12');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.13');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -314,10 +330,10 @@ const { chromium } = require('playwright');
 
     // The physical activity-LED preference saves without a separate button.
     await page.evaluate(() => showView('settings'));
-    const activityLed = page.getByRole('checkbox', { name: 'Flash blue ESP32 LED on activity', exact: true });
-    assert.equal(await activityLed.isChecked(), true, 'legacy configuration defaults to activity flashing');
+    const activityLed = page.getByRole('checkbox', { name: 'Enable blue ESP32 BT sync indicator', exact: true });
+    assert.equal(await activityLed.isChecked(), true, 'legacy configuration defaults to the BT sync indicator');
     assert.match(await page.locator('#activity-led-settings').textContent(), /survives power restarts/);
-    assert.match(await page.locator('#activity-led-settings').textContent(), /Idle listening and Wi-Fi alone leave it off/);
+    assert.match(await page.locator('#activity-led-settings').textContent(), /JJY \/ LF transmission, idle listening and Wi-Fi never make it flash/);
     holdNextStatus = true;
     const oldLedStatusCaptured = new Promise(resolve => { statusHeld = resolve; });
     await page.evaluate(() => { window.oldLedStatus = tick(); });
@@ -361,7 +377,7 @@ const { chromium } = require('playwright');
     assert.equal(config.activity_led_enabled, true);
     assert.equal(await activityLed.isChecked(), true, 'late pre-save config cannot undo a saved LED preference');
     await page.reload();
-    await page.waitForFunction(() => document.getElementById('activityLedStatus').textContent === 'Flash on activity');
+    await page.waitForFunction(() => document.getElementById('activityLedStatus').textContent === 'BT sync indicator');
     assert.equal(await activityLed.isChecked(), true, 'LED On survives a page reload from saved config');
     await page.evaluate(() => {
       const led = window.setActivityLed;
@@ -374,8 +390,119 @@ const { chromium } = require('playwright');
     assert.equal(await activityLed.isChecked(), true, 'failed storage write restores a focused LED checkbox immediately');
     assert.equal(await activityLed.isDisabled(), false);
     assert.equal(config.activity_led_enabled, true);
-    assert.equal(await page.locator('#activityLedStatus').textContent(), 'Flash on activity');
+    assert.equal(await page.locator('#activityLedStatus').textContent(), 'BT sync indicator');
     assert.equal(await page.locator('#toast').textContent(), 'LED setting could not be saved');
+
+    // Daily history saves one preference immediately and shields the focused
+    // checkbox from rejected writes and late status/config responses.
+    await page.evaluate(()=>showView('watch'));
+    await page.evaluate(()=>{const h=window.setBtHistoryPersist,a=window.saveWifiAccess;window.setBtHistoryPersist=(...args)=>(window.lastHistorySave=h(...args));window.saveWifiAccess=(...args)=>(window.lastAccessSave=a(...args))});
+    const historyToggle=page.locator('#btHistoryPersist');
+    assert.equal(await historyToggle.isChecked(),true);
+    assert.match(await page.locator('#bt-history-settings').textContent(),/first successful sync each Brisbane calendar day/);
+    assert.match(await page.locator('#view-watch').textContent(),/Shows the last reading from a Bluetooth sync; kept in RAM and cleared on restart/);
+    assert.match(await page.locator('#bt-history-settings').textContent(),/later failure may be forgotten/);
+    holdNextStatus=true;const historyOldStatus=new Promise(resolve=>{statusHeld=resolve});
+    await page.evaluate(()=>{window.oldHistoryStatus=tick()});await historyOldStatus;
+    holdNextHistoryWrite=true;const historyPending=new Promise(resolve=>{historyWriteHeld=resolve});
+    await historyToggle.uncheck();await historyPending;
+    assert.equal(await historyToggle.isChecked(),false);assert.equal(await historyToggle.isDisabled(),true);
+    await page.evaluate(async()=>{renderStatus(await api('/api/status'));await loadConfig()});
+    assert.equal(await historyToggle.isChecked(),false);assert.equal(await page.locator('#btHistoryPersistStatus').textContent(),'Saving…');
+    releaseHistoryWrite();await page.evaluate(async()=>await window.lastHistorySave);releaseStatus();await page.evaluate(async()=>await window.oldHistoryStatus);
+    assert.equal(config.bt_history_persist,false);assert.equal(await historyToggle.isChecked(),false);
+    await page.reload();await page.waitForFunction(()=>document.getElementById('btHistoryPersistStatus').textContent==='RAM only');
+    assert.equal(await historyToggle.isChecked(),false);
+    await page.evaluate(()=>{const h=window.setBtHistoryPersist;window.setBtHistoryPersist=(...args)=>(window.lastHistorySave=h(...args));showView('watch')});
+    rejectNextHistoryWrite=true;await historyToggle.click();await page.evaluate(async()=>await window.lastHistorySave);
+    assert.equal(await historyToggle.isChecked(),false);assert.equal(await historyToggle.isDisabled(),false);
+    holdNextConfig=true;const historyOldConfig=new Promise(resolve=>{configHeld=resolve});
+    await page.evaluate(()=>{window.oldHistoryConfig=loadConfig()});await historyOldConfig;
+    await historyToggle.check();await page.evaluate(async()=>await window.lastHistorySave);releaseConfig();await page.evaluate(async()=>await window.oldHistoryConfig);
+    assert.equal(await historyToggle.isChecked(),true);assert.equal(config.bt_history_persist,true);
+    config.bt_history_saved_at='2026-10-09 06:30:17';config.bt_history_save_status='Saved first success today';
+    await page.evaluate(()=>tick());assert.equal(await page.locator('#btHistorySavedAt').textContent(),'2026-10-09 06:30:17');
+    await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
+    await page.screenshot({path:'/tmp/radioclock-v413-watch-history.png',fullPage:true,animations:'disabled'});
+
+    // Daily access is independent of watch/LF zones and accepts midnight-crossing
+    // windows. Enabling picks Power-save; disabling preserves that mode.
+    await page.evaluate(()=>showView('settings'));
+    await page.evaluate(()=>{const a=window.saveWifiAccess;window.saveWifiAccess=(...args)=>(window.lastAccessSave=a(...args))});
+    const accessToggle=page.locator('#wifiAccessEnabled');
+    assert.equal(await accessToggle.isChecked(),false);
+    assert.equal(await page.locator('#wifiAccessStart').inputValue(),'18:00');
+    await page.locator('#wifiAccessStart').fill('22:30');await page.locator('#wifiAccessEnd').fill('01:15');
+    await page.locator('#wifiAccessTimezone').selectOption('Asia/Tokyo');await page.evaluate(()=>tick());
+    assert.equal(await page.locator('#wifiAccessStart').inputValue(),'22:30','polling retains drafts');
+    holdNextStatus=true;const accessOldStatus=new Promise(resolve=>{statusHeld=resolve});
+    await page.evaluate(()=>{window.oldAccessStatus=tick()});await accessOldStatus;
+    holdNextAccessWrite=true;const accessPending=new Promise(resolve=>{accessWriteHeld=resolve});
+    await accessToggle.check();await accessPending;
+    assert.equal(await accessToggle.isDisabled(),true);assert.equal(await page.locator('#wifiAccessSave').isDisabled(),true);
+    assert.equal(await page.locator('#wifiKeepOn').isDisabled(),true);
+    await page.evaluate(async()=>{renderStatus(await api('/api/status'));await loadConfig()});
+    assert.equal(await accessToggle.isChecked(),true);assert.equal(await page.locator('#wifiAccessStart').inputValue(),'22:30');
+    releaseAccessWrite();await page.evaluate(async()=>await window.lastAccessSave);releaseStatus();await page.evaluate(async()=>await window.oldAccessStatus);
+    assert.equal(config.wifi_access_start,1350);assert.equal(config.wifi_access_end,75);assert.equal(config.wifi_access_timezone,'Asia/Tokyo');
+    assert.equal(config.wifi_power_mode,1);assert.equal(await page.locator('#wifiKeepOn').isChecked(),false);
+    assert.equal(await page.locator('#wifiAccessStatus').textContent(),'Scheduled daily');
+    assert.equal(await page.locator('#btTimezone').inputValue(),'Australia/Brisbane');
+    assert.match(await page.locator('#wifiAccessHelp').textContent(),/Startup access, the setup AP, recovery and brief NTP wakeups/);
+    await page.evaluate(()=>setWifiPowerMode(0));assert.equal(await page.locator('#wifiAccessStatus').textContent(),'Overridden by Always on');
+    await page.locator('#wifiAccessStart').fill('23:00');await page.locator('#wifiAccessEnd').fill('23:00');
+    const invalidAccessPosts=requests.filter(r=>r.method==='POST').length;
+    await page.getByRole('button',{name:'Save Wi-Fi access schedule',exact:true}).click();await page.evaluate(async()=>await window.lastAccessSave);
+    assert.equal(requests.filter(r=>r.method==='POST').length,invalidAccessPosts);
+    await page.locator('#wifiAccessEnd').fill('02:00');rejectNextAccessWrite=true;
+    await page.getByRole('button',{name:'Save Wi-Fi access schedule',exact:true}).click();await page.evaluate(async()=>await window.lastAccessSave);
+    assert.equal(await page.locator('#wifiAccessStart').inputValue(),'22:30');assert.equal(await page.locator('#wifiAccessEnd').inputValue(),'01:15');
+    assert.equal(await page.locator('#wifiKeepOn').isChecked(),true,'failed grouped write preserves old mode');
+    await page.locator('#wifiAccessStart').fill('21:00');await page.locator('#wifiAccessEnd').fill('03:00');
+    await page.getByRole('button',{name:'Save Wi-Fi access schedule',exact:true}).click();await page.evaluate(async()=>await window.lastAccessSave);
+    assert.equal(config.wifi_power_mode,1);
+    holdNextConfig=true;const accessOldConfig=new Promise(resolve=>{configHeld=resolve});
+    await page.evaluate(()=>{window.oldAccessConfig=loadConfig()});await accessOldConfig;
+    await accessToggle.uncheck();await page.evaluate(async()=>await window.lastAccessSave);releaseConfig();await page.evaluate(async()=>await window.oldAccessConfig);
+    assert.equal(await accessToggle.isChecked(),false);assert.equal(await page.locator('#wifiKeepOn').isChecked(),false);
+    await page.reload();await page.waitForFunction(()=>document.getElementById('wifiAccessStart').value==='21:00');
+    await page.evaluate(()=>showView('settings'));
+    assert.equal(await accessToggle.isChecked(),false);assert.equal(await page.locator('#wifiAccessEnd').inputValue(),'03:00');
+    await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
+    await page.screenshot({path:'/tmp/radioclock-v413-settings.png',fullPage:true,animations:'disabled'});
+
+    // State colors are derived from active RF sessions and AP precedence, in
+    // both saved UI themes. An RF zero-carrier envelope remains green.
+    await page.evaluate(()=>showView('home'));
+    const tileColors=()=>page.evaluate(()=>['radioStatusTile','wifiStatusTile'].map(id=>{const c=getComputedStyle(document.getElementById(id));return {color:c.color,bg:c.backgroundImage,border:c.borderTopColor}}));
+    for(const theme of ['dark','light']){
+      await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+      Object.assign(status,{radio_active:true,radio_paused:true,carrier_hz:0,wifi_connected:true,ap_mode:false,wifi_ip:'10.0.1.137'});await page.evaluate(()=>tick());
+      assert.equal(await page.locator('#radioStatusTile').evaluate(e=>e.classList.contains('state-good')),true);
+      assert.equal(await page.locator('#wifiStatusTile').evaluate(e=>e.classList.contains('state-good')),true);
+      const activeColors=await tileColors();assert.equal(activeColors[0].color,activeColors[1].color);
+      Object.assign(status,{radio_active:false,ap_mode:true,ap_ip:'192.168.4.1'});await page.evaluate(()=>tick());
+      assert.equal(await page.locator('#wifiStatusTile').evaluate(e=>e.classList.contains('state-bad')),true);
+      assert.equal(await page.locator('#heroWifi').textContent(),'Setup AP');assert.equal(await page.locator('#quickWifiIp').textContent(),'192.168.4.1');
+      const idleColors=await tileColors();assert.equal(idleColors[0].color,idleColors[1].color);assert.notEqual(idleColors[0].color,activeColors[0].color);
+      assert.notEqual(idleColors[0].border,activeColors[0].border);
+    }
+    await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+    Object.assign(status,{radio_active:true,station:0,tx_time:'2026-10-07 12:00:00',bt_time:'2026-10-07 13:00:00',carrier_hz:40000,ap_mode:false,wifi_connected:true,radio_paused:false,bt_last_sync_status:'Watch 1: time write delivered'});await page.evaluate(async()=>{await tick();await updateDiagnostics(true)});
+    await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
+    await page.screenshot({path:'/tmp/radioclock-v413-overview-active.png',fullPage:true,animations:'disabled'});
+    await page.evaluate(()=>document.documentElement.dataset.theme='light');
+    await page.screenshot({path:'/tmp/radioclock-v413-overview-light.png',fullPage:true,animations:'disabled'});
+    await page.setViewportSize({width:390,height:844});
+    await page.evaluate(()=>{document.documentElement.dataset.theme='dark';showView('settings');window.scrollTo({top:0,left:0,behavior:'instant'})});
+    await page.screenshot({path:'/tmp/radioclock-v413-settings-phone.png',fullPage:true,animations:'disabled'});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'new controls must not overflow phone width');
+    assert.deepEqual(await page.locator('.navbtn').allTextContents(),['Overview','Radio','Watch (BLE)','Schedules','Network','Settings','Diagnostics','About']);
+    await page.evaluate(()=>{showView('watch');window.scrollTo({top:0,left:0,behavior:'instant'})});
+    await page.screenshot({path:'/tmp/radioclock-v413-watch-phone.png',fullPage:true,animations:'disabled'});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+    await page.setViewportSize({width:1440,height:1000});
+    Object.assign(status,{radio_active:false,station:-1,ap_mode:false,carrier_hz:0,bt_last_sync_status:'GW-BX5600 MIP - sync attempt failed'});await page.evaluate(()=>tick());
 
     // Font is a per-watch opt-in; saved selections survive reload and errors.
     await page.evaluate(() => showView('watch'));
@@ -458,11 +585,14 @@ const { chromium } = require('playwright');
     assert.match(await page.locator('#diagnostics').textContent(),/Full-time BT listen \(Always Wait\): Off/);
     assert.match(await page.locator('#diagnostics').textContent(),/Next JJY transmission: 2026-10-07 21:00.*Asia\/Tokyo.*JJY 60 kHz/);
     assert.match(await page.locator('#diagnostics').textContent(),/Last reset reason: Brownout/);
+    assert.match(await page.locator('#diagnostics').textContent(),/BT saved snapshot.*2026-10-09 06:30:17/);
+    assert.match(await page.locator('#diagnostics').textContent(),/First success each Brisbane day; later updates RAM only/);
+    assert.match(await page.locator('#diagnostics').textContent(),/BLE connects.*3 \/ 2 \/ 4 \/ 0/);
     assert.match(await page.locator('#diagnostics').textContent(),/Largest free heap block: 90000 bytes/);
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:'/tmp/radioclock-v49-diagnostics.png',fullPage:true});
     assert.deepEqual(pageErrors, []);
-    console.log('Browser regressions passed: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
+    console.log('V4.13 browser regressions passed: daily history autosave/persistence/rollback/pending and stale reads, overnight Wi-Fi group/drafts/power override, green/red RF/AP states in dark/light, phone/sidebar screenshots; existing: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

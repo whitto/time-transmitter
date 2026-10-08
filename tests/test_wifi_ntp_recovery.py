@@ -107,7 +107,7 @@ bool ap_mode=true, wifiConnectionPending=false, wifiRecoveryWindowActive=false;
 bool apStartPending=false;
 uint32_t apStartAttemptMillis=0;
 bool ntpResumePending=false;
-bool wifiRadioEnabled=true, scheduleWantsWifi=false;
+bool wifiRadioEnabled=true, scheduleWantsWifi=false, accessWantsWifi=false;
 uint32_t wifiRecoveryStarted=0, wifi_connect_start=0, bootMillis=0;
 uint32_t tick=100;
 uint32_t millis() { return tick; }
@@ -126,6 +126,7 @@ bool radioSetPaused(bool value) {
 void radioRequestRefresh() { ++refreshes; }
 String posixTzFor(const String& name) { assert(name=="Australia/Brisbane"); return "AEST-10"; }
 bool shouldWifiBeOnForSchedule() { return scheduleWantsWifi; }
+bool wifiAccessWindowOpen() { return accessWantsWifi; }
 portMUX_TYPE clockMux=0;
 uint32_t clockNtpSyncCount=0;
 std::atomic<int> ntpsync{1};
@@ -173,7 +174,7 @@ void reset() {
   std::copy(defaultMac,defaultMac+6,derivedApMac);
   wifiRecoveryStarted=0;wifi_connect_start=0;wifiRadioEnabled=true;
   wifiPowerMode=WIFI_POWER_ALWAYS_ON;bootMillis=tick;
-  scheduleWantsWifi=false;radioPaused=true;radioTaskHandle=reinterpret_cast<void*>(1);
+  scheduleWantsWifi=accessWantsWifi=false;radioPaused=true;radioTaskHandle=reinterpret_cast<void*>(1);
   pauseOk=resumeOk=true;pauses=resumes=refreshes=0;
   configs=ntpStops=restarts=callbackSets=localTimeReads=0;
   clockNtpSyncCount=0;ntpsync=1;ntpEnabled=false;

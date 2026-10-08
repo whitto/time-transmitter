@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_12/RadioClock_V4_12.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_13/RadioClock_V4_13.ino'
 
 
 def balanced_block(source, start):
@@ -82,6 +82,8 @@ MOCKS = r'''
 #include <vector>
 #include "RadioBleArbiter.h"
 #include "CasioWatchBattery.h"
+#include "BtSyncHistory.h"
+#include "RadioWifiAccessWindow.h"
 #define portENTER_CRITICAL(x) ((void)0)
 #define portEXIT_CRITICAL(x) ((void)0)
 #define portMUX_INITIALIZER_UNLOCKED 0
@@ -96,6 +98,7 @@ public:
   String(const char* p = "") : s(p) {}
   String(std::string p) : s(std::move(p)) {}
   String(int n) : s(std::to_string(n)) {}
+  String(unsigned long n) : s(std::to_string(n)) {}
   size_t length() const { return s.length(); }
   const char* c_str() const { return s.c_str(); }
   void reserve(size_t n) { s.reserve(n); }
@@ -253,6 +256,16 @@ struct File {
   std::string* contents = nullptr;
   size_t position = 0;
   explicit operator bool() const { return contents; }
+  size_t size() const { return contents ? contents->size() : 0; }
+  size_t read(uint8_t* out, size_t count) {
+    const size_t available = position < size() ? size() - position : 0;
+    count = std::min(count, available);
+    if (count) std::memcpy(out, contents->data() + position, count);
+    position += count; return count;
+  }
+  size_t write(const uint8_t* data, size_t count) {
+    contents->append(reinterpret_cast<const char*>(data), count); return count;
+  }
   String readStringUntil(char end) {
     if (position >= contents->length()) return "";
     size_t next = contents->find(end, position);
@@ -275,6 +288,9 @@ constexpr int SN_JJY_E = 0, SN_BPC = 5, WIFI_POWER_ALWAYS_ON = 0, WIFI_POWER_SCH
 char ssid[64] = "test", passwd[64] = "";
 String timezone_name(DEFAULT_TZ_NAME);
 int full_time_station = SN_JJY_E, transmission_offset_minutes = 0, wifiPowerMode = 0;
+bool wifiAccessEnabled = false;
+int wifiAccessStart = 1080, wifiAccessEnd = 1200;
+String wifiAccessTimezone("Australia/Brisbane");
 constexpr const char *DEFAULT_BT_TIMEZONE = "Australia/Brisbane";
 String btTimezoneName(DEFAULT_BT_TIMEZONE);
 int btTimeOffsetMinutes = 0;
@@ -324,6 +340,9 @@ void resetBluetoothDayIfNeeded();
 void stopBluetoothWindow();
 void startBluetoothWindow(int, bool = false);
 void saveConfig();
+static void captureLegacyBluetoothHistory();
+static void loadBluetoothHistory();
+static bool saveBluetoothHistoryNow(time_t);
 '''
 
 DRIVER = r'''
@@ -462,7 +481,8 @@ int main(int argc, char** argv) {
   assert(btTimezoneName == "Asia/Tokyo" && btTimeOffsetMinutes == 30);
   assert(btProfileAddress[0] == "11:22:33:44:55:66" && btProfileAddress[1] == "aa:bb:cc:dd:ee:ff");
   assert(btProfileProtocol[0] == 1 && btProfileProtocol[1] == 2 && btProfileProtocol[2] == 1 && btProfileProtocol[3] == 2);
-  assert(btLastSyncDate == "2024-01-01 22:00:00");
+  // The compact snapshot stores UTC, rendered using the restored watch timezone.
+  assert(btLastSyncDate == "2024-01-01 21:30:00");
   assert(btLastSyncStatus.indexOf("delivered") >= 0 && btLastSyncStatus.indexOf("watch unverified") >= 0);
   assert(std::strstr(btDeliveryEvidence, "watch display unverified"));
 
@@ -703,7 +723,8 @@ class BluetoothWorkflowTest(unittest.TestCase):
                  'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'commitBluetoothBattery', 'attemptBluetoothSync', 'serviceBluetoothSync',
                  'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
                  'btLastSunday', 'btDayOfYear', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
-                 'loadConfig', 'writeConfigNow', 'saveConfig']
+                 'loadConfig', 'captureLegacyBluetoothHistory', 'clearBluetoothRuntimeHistory',
+                 'loadBluetoothHistory', 'saveBluetoothHistoryNow', 'writeConfigNow', 'saveConfig']
         functions = '\n\n'.join(extract_function(source, n) for n in names)
         routes = '\n'.join(extract_route(source, path) for path in
                            ['/api/settings', '/api/bluetooth-pair', '/api/bluetooth-sync'])
@@ -713,9 +734,11 @@ class BluetoothWorkflowTest(unittest.TestCase):
         led_branch = balanced_block(source, source.index('if (server.hasArg("activity_led_enabled"))'))
         font_branch = balanced_block(source, source.index('if (server.hasArg("bt_font_profile") ||'))
         power_branch = balanced_block(source, source.index('if (server.hasArg("bt_idle_power_save"))'))
+        history_branch = balanced_block(source, source.index('if (server.hasArg("bt_history_persist"))'))
+        wifi_branch = balanced_block(source, source.index('if (server.hasArg("wifi_access_enabled") ||'))
         routes = ('void registerRoutes() {\n' + routes +
                   '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + protocol_branch + '\n});' +
-                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
+                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + history_branch + wifi_branch + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
         # Forward declaration precedes initBluetoothSync, which creates this callback class.
         functions = functions.replace('void initBluetoothSync(void) {', scan + '\n\nvoid initBluetoothSync(void) {', 1)
         return '\n'.join([MOCKS, source[globals_start:globals_end], HELPERS, functions, routes, DRIVER])

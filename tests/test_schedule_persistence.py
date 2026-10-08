@@ -175,7 +175,6 @@ bool rfPaused = false;
 bool radioSetPaused(bool pause) { rfPaused = pause; return true; }''')
         mocks = mocks.replace('  void flush() {}', '''
   size_t write(uint8_t value) { contents->push_back(char(value)); return 1; }
-  size_t write(const uint8_t* values, size_t length) { contents->append(reinterpret_cast<const char*>(values), length); return length; }
   void flush() {}''')
         mocks = mocks.replace('struct LittleFsMock {', 'bool mockRenameOk = true;\nstruct LittleFsMock {')
         mocks = mocks.replace('flash[to] = flash.at(from);', 'if (!mockRenameOk) return false; flash[to] = flash.at(from);')

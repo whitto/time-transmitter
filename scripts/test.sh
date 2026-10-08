@@ -8,7 +8,9 @@ python3 tests/test_ble_lifecycle.py
 python3 tests/test_ble_scan_control.py
 python3 tests/test_clock_and_encoders.py
 python3 tests/test_wifi_ntp_recovery.py
+python3 tests/test_wifi_access_schedule.py
 python3 tests/test_bluetooth_workflow.py
+python3 tests/test_bt_history.py
 python3 tests/test_schedule_persistence.py
 python3 tests/test_activity_led.py
 python3 tests/test_watch_options.py

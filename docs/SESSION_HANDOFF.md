@@ -1,32 +1,46 @@
 # Time Transmitter / RadioClock — session handoff
 
-Prepared on **8 October 2026**, using the user's **Australia/Brisbane** timezone.
+Updated on **9 October 2026**, using the user's **Australia/Brisbane** timezone.
 
 ## Read this first
 
-This is maintenance of the user's own ESP32 watch transmitter. The latest request is to read the watch battery during Bluetooth sync and show it on Watch (BLE) and the overview’s top Watch card, followed by a versioned source release and a direct Arduino-source ZIP. The earlier panic/font corrections must be preserved. They also requested this Markdown handoff and links to the project in the main-page header and About section.
+This is maintenance of the user's own ESP32 watch transmitter. The latest request is V4.13: change the blue LED to a BT-only sync indicator with a 24-hour success hold, optionally retain minimal BT status/diagnostic data across reboot with one daily compact snapshot, add an independent daily Wi-Fi web-access window, and colour Wi-Fi/radio status according to actual state. The user stressed reducing flash wear and saving only essential status, with no logs. Preserve the V4.12 battery feature, earlier panic/font corrections, project links and approved sidebar.
 
-**Status at handoff: V4.12 adds GW-BX5600 battery estimates during sync and both requested UI displays. It retains V4.11’s scan fix, font correction and project links. Cloud validation is recorded in `docs/V4.12-review.md`; physical ESP32/watch acceptance remains outstanding.** A successful compile or host test does not establish physical device/watch behavior.
+**Status at handoff: V4.13 implementation and cloud validation are complete, prepared for a source-only release.** All 37 Python host cases, UI/browser checks, native packet/RF stress, history sanitizers and the Node32s compile passed. V4.13 preserves V4.12 battery reporting and V4.11’s scan/font corrections. A successful compile or host test does not establish physical device/watch behavior; no ESP32 or watch is attached to the cloud.
 
-Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, and `docs/V4.12-review.md` before editing. Preserve existing user changes.
+Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md` and `docs/V4.13-review.md` before editing. `docs/V4.12-review.md` records the previous validated baseline. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
 
 ## Repository and current release
 
 - Repository: <https://github.com/whitto/time-transmitter>.
 - Cloud checkout: `/workspace/time-transmitter`, branch `main`.
-- Current release: **V4.12**, tag `v4.12`; resolve its commit with `git rev-parse v4.12^{commit}`.
+- Source release: **V4.13**, tag `v4.13`; resolve its commit with `git rev-parse v4.13^{commit}`. Previous release: **V4.12**.
 - Previous V4.11 release commit: `9edbdc2462b76757cabba9ca689e62689c6e93b8`.
-- V4.12 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.12>.
-- V4.12 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.12.zip>.
-- Arduino files only: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.12.zip>.
-- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.12/docs/SESSION_HANDOFF.md>.
+- V4.13 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.13>.
+- V4.13 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.13.zip>.
+- Arduino files only: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.13.zip>.
+- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.13/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.
 - V4.10 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.10>.
 - V4.10 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.10.zip>.
-- Current active source: `firmware/RadioClock_V4_12/RadioClock_V4_12.ino`; V4.11 and V4.10 is retained for comparison.
-- The current version contains `CasioWatchBattery.h`, per-profile battery status in RAM, `RadioBleScanControl.h`, the corrected font helper, tests, project links and this handoff. Check `git status` and actual diffs before editing; later work may have progressed.
+- Current active source: `firmware/RadioClock_V4_13/RadioClock_V4_13.ino`; previous version folders are retained for comparison.
+- Keep the complete 11-file sketch folder: `.ino`, README, `partitions.csv` and eight companion headers. V4.13 adds `BtSyncLed.h`, `BtSyncHistory.h` and `RadioWifiAccessWindow.h`; existing `CasioWatchBattery.h`, `RadioBleScanControl.h`, other protocol helpers and project links remain. Check `git status` and actual diffs before editing; later work may have progressed.
 - UI source: `ui/radioclock.html`; approved layout reference: `ui/v32_ui_mockup.png`.
 - The previous V4.11 ZIP was downloaded and verified against all 162 tracked release files. Repeat that verification for each published version, including the Arduino-source-only ZIP.
+
+## Approved V4.13 scope and behavior
+
+The user required asking before changing working functions and then **approved these specific changes**: LED handling, BT result/history saving, configuration/API handlers, Wi-Fi power management and UI rendering. Keep BT packet protocols, LF generation/timing and working Wi-Fi/AP/NTP connection helpers unchanged. No additional generic approval is needed within this scope. Ask before unrelated fixes or fundamental layout changes.
+
+The blue GPIO2 LED flashes only during an actual BT connection/time-sync transaction. With the master LED setting On, successful TIME delivery leaves it solid for 24 hours from the UTC success timestamp; an actual failed BT transaction clears it. Waiting for a watch, a no-watch window or RF-deferred work does not clear a previous success. Optional font/battery failure does not negate successful TIME delivery. LF transmission does not flash it, but a solid success indication may continue during RF. Existing master Off choices remain Off.
+
+**Save BT sync status to flash** is a saved Watch-card toggle, default On. The user explicitly accepted saving the **first successful sync each Brisbane calendar day immediately**, keeping later events in RAM, and restoring that first snapshot after reboot. A later failure can therefore be forgotten after reboot. The snapshot stores only UTC success timestamps, watch/profile address and protocol identity, saved-day quota/validation metadata, and four diagnostic counters: connection attempts, acknowledged writes, notifications and response errors. There is no logfile, serial-output storage, font result, battery reading or verbose error text. Profile completion is restored only for the matching binding. Routine syncs no longer save the config file merely to record history; changed bindings still save as required configuration. Frozen legacy fields prevent current RAM history leaking into unrelated settings writes.
+
+History Off keeps current status in RAM but disables history writes/restoration across reboot. It invalidates the old saved snapshot for future re-enabling. Valid saved-day metadata still enforces the daily quota across reboot and toggle changes. The quota means one successful snapshot commit per Brisbane day; LittleFS can perform internal metadata operations for a commit. A failed save does not retry during the same uptime/day. Battery readings, font results and later diagnostic events remain RAM only. No history save occurs while idle or on a failed TIME transaction.
+
+**Settings → Daily Wi-Fi access** saves a recurring start/end/timezone group, default disabled with 18:00–20:00 Australia/Brisbane selected. Enabling automatically selects Power-save. Start is inclusive, end exclusive; overnight windows are valid, equal times invalid. Disabling leaves the power mode unchanged; Network Always on overrides the window. The user approved retaining setup AP, five-minute startup/recovery access and existing short NTP wakeups outside the window. This timezone is independent of both LF and BT timezones.
+
+Overview Wi-Fi is green for a station connection, red for setup AP (AP-plus-station uses red precedence). Radio is green while LF is active and red while idle. Keep all eight sidebar pages and compare rendered screenshots against `ui/v32_ui_mockup.png` before publication.
 
 ## V4.12 battery feature
 
@@ -57,7 +71,7 @@ The watch is a **Casio GW-BX5600, module 3578**, using the GW-BX5600 MIP protoco
 - Fixed left sidebar with **Overview, Radio, Watch (BLE), Schedules, Network, Settings, Diagnostics, About**. No fundamental layout changes are authorized.
 - Separate reporting of time delivery and font result; Diagnostics explains the limits of independent watch verification.
 
-The recent Wi-Fi AP problem was resolved by the user: **“ok i fixed the wifi issue and its working again.”** They did not identify the exact hardware/upload change. Do not alter the working Wi-Fi/NTP path as part of this fix without evidence. V4.10's checked AP startup and earlier cold-network/SNTP fixes remain.
+The recent Wi-Fi AP problem was resolved by the user: **“ok i fixed the wifi issue and its working again.”** They did not identify the exact hardware/upload change. V4.13's approved change adds a daily access condition to the existing power manager; keep working Wi-Fi/AP/NTP connection helpers intact. V4.10's checked AP startup and earlier cold-network/SNTP fixes remain.
 
 ## Panic investigation: evidence and limits
 
@@ -135,20 +149,22 @@ Reference implementations and real captures already reviewed:
 
 Readback agreement is stronger than a write acknowledgement, but the physical watch display still needs checking. A manual time-sync session may impose additional settings permissions; do not claim that moved ordering alone proves the device accepted a font change.
 
-## Flash changes: still queued, not part of this release
+## Flash policy and remaining queued change
 
-The user wants **no logs written to flash** and only required settings persisted across reboots. They were mainly concerned about writes while the ESP sits running, rather than explicit configuration changes.
+The user wants **no logs written to flash** and only required configuration plus the newly approved minimal daily BT status persisted. Their main concern is writes while the ESP sits running, rather than explicit settings changes. V4.13's compact daily snapshot supersedes the earlier RAM-only proposal when its toggle is On; Off remains RAM only.
 
-Two changes were approved **for a later version, queued only**:
+The earlier queue contained two changes:
 
-1. Keep routine Bluetooth sync history/date/protocol completion information in RAM, preserving persistent watch bindings when pairing changes configuration.
-2. Remove recurring background retries of failed configuration saves; retry only after an explicit user save/retry, retain the previously saved configuration on failure, and acknowledge success only after a durable write.
+1. Routine per-sync history/config writes: addressed in V4.13 by the approved daily snapshot policy and frozen legacy settings fields, preserving required binding saves.
+2. Remove recurring background retries of failed configuration saves: **still queued**, outside this release. Retry only after an explicit user save/retry, retain the previously saved configuration on failure, and acknowledge success only after a durable write.
 
-These remain unchecked in `docs/NEXT_VERSION.md`. Do not silently include them in unrelated updates. The current V4.10 log's `Config saved atomically` three seconds after a successful sync is evidence of the existing deferred save, not a serial-log file being written.
+Do not silently include the remaining general config-retry change in unrelated updates. The historical V4.10 log's `Config saved atomically` three seconds after sync was evidence of its deferred config save, not a serial-log file being written. Serial logs continue to be serial-only.
+
+The pinned ESP32 SDK enables flash core-dump support, but V4.13 removes the optional 64 KB core-dump row from the sketch-local partition table so panic dumps have no flash storage partition. App/LittleFS addresses and sizes stay unchanged; the final 64 KB is unused. Official IDF 5.5.5 source review confirmed that a missing core-dump partition prevents flash erase/write, with no fallback address. The SDK may print **“No core dump partition found!”** at boot; that is expected, not evidence of an application failure. Serial panic/backtrace output remains available. Do not claim the partition file is byte-identical to V4.12 or that the SDK build flag itself was changed. Do not erase saved settings for this table change.
 
 ## Build and verification workflow
 
-Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all active sketch companion headers, including `CasioWatchBattery.h` and `RadioBleScanControl.h`, and `partitions.csv` beside the `.ino` file.
+Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all eight active sketch companion headers and `partitions.csv` beside the `.ino` file.
 
 ```bash
 cd /workspace/time-transmitter
@@ -161,11 +177,17 @@ node scripts/test-ui-browser.cjs
 RADIOCLOCK_FQBN='esp32:esp32:node32s:PartitionScheme=no_ota,FlashFreq=40' bash scripts/compile.sh
 ```
 
-Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_12`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. The permanent coordinator regression is `tests/test_ble_scan_control.py`; keep it in the normal test runner. The investigation's native fixtures use the pinned installed NimBLE sources; temporary research files are not additional build dependencies.
+Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_13`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. The permanent coordinator regression is `tests/test_ble_scan_control.py`; keep it in the normal test runner. V4.13 adds `tests/test_bt_history.py` and `tests/test_wifi_access_schedule.py` and updates LED coverage. The investigation's native fixtures use the pinned installed NimBLE sources; temporary research files are not additional build dependencies.
 
 Before release, retain test/compiler/image evidence, record hashes of tested source, review the scope against the previous release, and inspect the actual rendered page against the approved sidebar mockup. The new version must be consistent in the sketch path, firmware label, UI, scripts and README.
 
 ## Cloud validation completed
+
+V4.13 passed all **37 Python host cases**, UI handler/browser checks, native BX capture/malformed-packet checks and 10,000-session concurrent RF/BLE arbiter stress without modeled overlap. Compact history codec and actual history integration fixtures passed AddressSanitizer/UndefinedBehaviorSanitizer. Tests cover BT-only LED behavior and 24-hour limits, history/quota/Off/On/reboot/corruption/failure handling, independent Wi-Fi window/DST conversion, existing access exceptions and durable grouped settings. Independent read-only review found no blocking issue and confirmed unchanged BT packet, RF and Wi-Fi/AP/NTP connection helpers.
+
+Node32s/core 3.3.12 compile: **1,426,872 / 2,097,152 bytes (68%)** program storage; **62,536 / 327,680 bytes (19%)** global RAM, leaving 265,144 bytes. The CLI reports board No OTA capacity; the sketch-local partition table retains the existing 3 MB application layout. Root inspected actual dark/light desktop and phone screenshots against the mockup; all eight sidebar routes remain. See `docs/V4.13-review.md`. Published archive comparison remains part of the release procedure.
+
+Previous V4.12 baseline:
 
 V4.12: all **31 Python host cases**, UI handler and browser checks, captured BX packet checks and concurrent RF/BLE arbiter stress passed. Battery tests include two identified GW-BX5600 captures, exact packet size/channel, fragmented/overflow/late responses, 1.5-second reply deadline, disconnection/RF cancellation, optional failures preserving time, TIME-success-only commit, replacement/profile isolation and no battery flash persistence. The UI tests distinguish 0% from null, retain date/time and previous readings on read failure, switch profiles and clear battery display on simulated restart.
 
@@ -185,14 +207,17 @@ No physical ESP32 or Casio watch is attached to the cloud. Ask the user for resu
 - Re-enable automatic slots and verify listening in the Bluetooth timezone.
 - Exercise RF start/stop and Bluetooth power-saving off/on transitions. BLE must remain off during RF; scanning must resume safely afterward.
 - Browse Diagnostics and navigate the UI while listening/syncing. Confirm NTP, independent JJY/BT timezones, configuration persistence after a power restart, and the unchanged eight-item sidebar.
+- Confirm the blue LED flashes only during actual BT transactions, stays solid after success through idle/RF, clears after an actual failure, respects Off, and expires at 24 hours.
+- With daily history On, confirm first-success save, later RAM-only events, first-snapshot restore after reboot, matching-binding completion data and retained day quota across reboot/Off/On. Confirm history Off and battery/font data remain RAM only.
+- Test daily Wi-Fi access with a short ordinary window and overnight times. Confirm independent timezone, inclusive start/exclusive end, Always-on override and setup/startup/recovery/NTP exceptions.
 - Do not erase flash or remove saved Wi-Fi settings merely to perform these checks.
 
 ## Release and communication requirements
 
 - User authorization includes fixing both issues and pushing the next release. No extra generic approval step is needed; necessary device evidence is distinct from authorization.
-- Bump the version for each new released change; the current release is **V4.12**. Preserve original author notices, credits and historical version folders.
+- Bump the version for each new released change; this source release is **V4.13**. Preserve original author notices, credits and historical version folders.
 - Publish **source only**; the user did not request compiled binaries.
 - Provide change/fix descriptions and a **direct GitHub tag ZIP link after every release**. Download that ZIP and verify it matches the tested source before reporting success.
-- V4.12 is the current release; preserve its verified source and do not claim a successful physical device test before the user reports one.
+- Preserve V4.12's verified source and do not claim a successful physical device test before the user reports one.
 - The user has been frustrated by unrelated cybersecurity warning messages. Those UI/account messages cannot be controlled by this repository; continue ordinary firmware maintenance and report the concrete outcome without claiming to fix the chat platform.
 
