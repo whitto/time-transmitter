@@ -23,13 +23,15 @@ const { chromium } = require('playwright');
     full_time_station: 0, transmission_offset_minutes: 0,
     bt_timezone: 'Australia/Brisbane', bt_time_offset_minutes: 0,
     wifi_power_mode: 0, bt_manual_profile: 0, bt_manual_protocol: 0,
-    bt_always_wait: false, bt_profiles: [binding],
+    bt_always_wait: false, bt_profiles: [binding,
+      { id: 1, bound: true, name: 'Other watch', address: '22:33:44:55:66:77', protocol: 1,
+        battery_percent: null, battery_read_at: '', battery_status: 'Battery reading supported on GW-BX5600 only' }],
     bt_times: [{ minute: 30, enabled: false, protocol: 0, profile: 0, done_today: true }],
   };
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.11', station: -1, radio_active: false,
+    firmware_version: 'V4.12', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     bt_day_complete: true, bt_pairing: false,
   };
@@ -81,6 +83,10 @@ const { chromium } = require('playwright');
               config.activity_led_enabled = fields.activity_led_enabled === '1';
               data = { status: 'ok' };
             }
+          } else if (Object.hasOwn(fields, 'bt_manual_profile')) {
+            assert.deepEqual(Object.keys(fields), ['bt_manual_profile']);
+            config.bt_manual_profile = Number(fields.bt_manual_profile);
+            data = { status: 'ok' };
           } else {
             assert.ok(Object.hasOwn(fields, 'bt_slot'), 'browser check expects slot or LED config writes');
             if (holdNextSlotWrite) {
@@ -127,7 +133,7 @@ const { chromium } = require('playwright');
         data = { status: 'ok' };
       }
       else if (url === '/api/diagnostics') data = {
-        firmware:'V4.11',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
+        firmware:'V4.12',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
         heap_free:120000,heap_min_free:110000,clock_state:'Synchronized',ntp_age_sec:60,
         ntp_sync_count:12,clock_error_est_sec:0.1,ntp_interval_sec:3600,wifi_connected:true,wifi_ip:'192.168.1.36',
         radio_active:false,radio_paused:false,carrier_hz:0,boundary_delay_us:80,boundary_delay_worst_us:100,
@@ -138,7 +144,7 @@ const { chromium } = require('playwright');
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.11');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.12');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -246,6 +252,50 @@ const { chromium } = require('playwright');
 
     assert.equal(await page.locator('#heroWatch').textContent(), 'Delivered · 2026-10-07 11:30:42', 'saved delivery must survive reboot status');
     assert.equal(await page.locator('#watchStatus').textContent(),'Time sync delivered');
+    // Both battery displays use the selected profile and keep the delivery
+    // timestamp separate from the last battery reading in Bluetooth time.
+    assert.equal(await page.locator('#quickWatchBattery').textContent(), 'Battery: unavailable · Watch 1');
+    assert.equal(await page.locator('#watchBattery').textContent(), 'Unavailable · Watch 1');
+    const batterySample = '2026-10-07 11:30:38';
+    Object.assign(binding, { battery_percent: 60, battery_read_at: batterySample, battery_status: 'Read during sync' });
+    const writesBeforeBatteryRead = requests.filter(r => r.method === 'POST').length;
+    await page.evaluate(() => tick());
+    assert.equal(await page.locator('#quickWatchBattery').textContent(), 'Battery: 60% estimate · Watch 1');
+    assert.equal(await page.locator('#watchBattery').textContent(), '60% · Watch 1');
+    assert.equal(await page.locator('#watchBatteryReadAt').textContent(), batterySample);
+    assert.equal(await page.locator('#watchBatteryStatus').textContent(), 'Read during sync');
+    assert.equal(await page.locator('#heroWatch').textContent(), 'Delivered · 2026-10-07 11:30:42');
+    assert.equal(await page.locator('#watchDate').textContent(), '2026-10-07 11:30:42');
+    assert.equal(requests.filter(r => r.method === 'POST').length, writesBeforeBatteryRead);
+    await page.evaluate(() => showView('home'));
+    await page.evaluate(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); document.getElementById('toast').classList.remove('show'); });
+    await page.screenshot({ path: '/tmp/radioclock-v412-battery-overview.png', fullPage: true, animations: 'disabled' });
+    await page.evaluate(() => showView('watch'));
+    await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
+    await page.screenshot({ path: '/tmp/radioclock-v412-battery-watch.png', fullPage: true, animations: 'disabled' });
+    binding.battery_percent = 0;
+    await page.evaluate(() => tick());
+    assert.equal(await page.locator('#watchBattery').textContent(), '0% · Watch 1');
+    binding.battery_percent = 100;
+    await page.evaluate(() => tick());
+    assert.equal(await page.locator('#quickWatchBattery').textContent(), 'Battery: 100% estimate · Watch 1');
+    binding.battery_status = 'Battery read timed out; last reading retained';
+    await page.evaluate(() => tick());
+    assert.equal(await page.locator('#watchBattery').textContent(), '100% · Watch 1');
+    assert.equal(await page.locator('#watchBatteryReadAt').textContent(), batterySample);
+    assert.match(await page.locator('#watchBatteryStatus').textContent(), /timed out; last reading retained/);
+    await page.locator('#btManualProfile').selectOption('1');
+    await page.waitForFunction(() => config.bt_manual_profile === 1 && !pendingSettings.has('bt_manual_profile'));
+    assert.equal(await page.locator('#quickWatchBattery').textContent(), 'Battery: unavailable · Watch 2');
+    assert.equal(await page.locator('#watchBattery').textContent(), 'Unavailable · Watch 2');
+    assert.match(await page.locator('#watchBatteryStatus').textContent(), /supported on GW-BX5600 only/);
+    await page.locator('#btManualProfile').selectOption('0');
+    await page.waitForFunction(() => config.bt_manual_profile === 0 && !pendingSettings.has('bt_manual_profile'));
+    assert.equal(await page.locator('#watchBattery').textContent(), '100% · Watch 1');
+    Object.assign(binding, { battery_percent: null, battery_read_at: '', battery_status: 'Not read since restart' });
+    await page.evaluate(() => tick());
+    assert.equal(await page.locator('#watchBattery').textContent(), 'Unavailable · Watch 1');
+    assert.equal(await page.locator('#watchBatteryReadAt').textContent(), 'Not read since restart');
     status.bt_last_sync_status = 'GW-BX5600 MIP - sync attempt failed';
     await page.evaluate(() => tick());
     assert.equal(await page.locator('#heroWatch').textContent(), 'Failed', 'a newer failure must remain visible after a saved delivery');
@@ -412,7 +462,7 @@ const { chromium } = require('playwright');
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:'/tmp/radioclock-v49-diagnostics.png',fullPage:true});
     assert.deepEqual(pageErrors, []);
-    console.log('Browser regressions passed: font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
+    console.log('Browser regressions passed: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.11', radio_active: false, station: -1,
+  firmware_version: 'V4.12', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -150,11 +150,53 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.11');
+assert.equal(element('fw').textContent, 'V4.12');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
 assert.equal(element('watchStatus').textContent, 'Time sync delivered');
+// Battery estimates follow the selected watch, retain 0%, and never replace
+// the date/time of a successful time delivery with the battery sample time.
+assert.equal(element('quickWatchBattery').textContent, 'Battery: unavailable · Watch 1');
+assert.equal(element('watchBattery').textContent, 'Unavailable · Watch 1');
+assert.equal(element('watchBatteryReadAt').textContent, 'Not read since restart');
+const originalProfiles = structuredClone(state.bt_profiles);
+const batterySample = '2026-10-06 22:15:38';
+state.bt_profiles = [
+  { id: 0, bound: true, address: '11:22:33:44:55:66', protocol: 0, battery_percent: 60, battery_read_at: batterySample, battery_status: 'Read during sync' },
+  { id: 1, bound: true, address: '22:33:44:55:66:77', protocol: 1, battery_percent: null, battery_read_at: '', battery_status: 'Battery reading supported on GW-BX5600 only' },
+];
+const writesBeforeBatteryRead = requests.filter(r => r.method === 'POST').length;
+await evaluate('tick()');
+assert.equal(element('quickWatchBattery').textContent, 'Battery: 60% estimate · Watch 1');
+assert.equal(element('watchBattery').textContent, '60% · Watch 1');
+assert.equal(element('watchBatteryReadAt').textContent, batterySample);
+assert.equal(element('watchBatteryStatus').textContent, 'Read during sync');
+assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42');
+assert.equal(element('watchDate').textContent, '2026-10-06 22:15:42');
+assert.equal(requests.filter(r => r.method === 'POST').length, writesBeforeBatteryRead, 'showing battery status must not save settings');
+state.bt_profiles[0].battery_percent = 0;
+await evaluate('tick()');
+assert.equal(element('watchBattery').textContent, '0% · Watch 1', 'a valid empty-battery estimate must not be treated as unavailable');
+state.bt_profiles[0].battery_percent = 100;
+await evaluate('tick()');
+assert.equal(element('quickWatchBattery').textContent, 'Battery: 100% estimate · Watch 1');
+state.bt_profiles[0].battery_status = 'Battery read timed out; last reading retained';
+await evaluate('tick()');
+assert.equal(element('watchBattery').textContent, '100% · Watch 1');
+assert.equal(element('watchBatteryReadAt').textContent, batterySample);
+assert.match(element('watchBatteryStatus').textContent, /timed out; last reading retained/);
+await evaluate("setBtManualProfile('1')");
+assert.equal(element('quickWatchBattery').textContent, 'Battery: unavailable · Watch 2');
+assert.equal(element('watchBattery').textContent, 'Unavailable · Watch 2', 'switching to another profile must not inherit the prior watch reading');
+assert.match(element('watchBatteryStatus').textContent, /supported on GW-BX5600 only/);
+await evaluate("setBtManualProfile('0')");
+assert.equal(element('watchBattery').textContent, '100% · Watch 1');
+state.bt_profiles = originalProfiles; // Simulate restart clearing RAM-only samples.
+await evaluate('tick()');
+assert.equal(element('watchBattery').textContent, 'Unavailable · Watch 1');
+assert.equal(element('watchBatteryReadAt').textContent, 'Not read since restart');
+console.log('Battery UI checks passed: 0/null/60/100%, per-watch selection, read date/status, retained failure and restart.');
 status.bt_last_sync_status = 'Last time write delivered (saved; watch unverified)';
 await evaluate('tick()');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42');

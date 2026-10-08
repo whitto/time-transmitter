@@ -12,6 +12,7 @@ python3 tests/test_bluetooth_workflow.py
 python3 tests/test_schedule_persistence.py
 python3 tests/test_activity_led.py
 python3 tests/test_watch_options.py
+python3 tests/test_watch_battery.py
 python3 tests/test_rf_handoff.py
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT

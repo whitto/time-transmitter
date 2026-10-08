@@ -4,27 +4,39 @@ Prepared on **8 October 2026**, using the user's **Australia/Brisbane** timezone
 
 ## Read this first
 
-This is maintenance of the user's own ESP32 watch transmitter. The user wants the recurring panic fixed **and** the GW-BX5600 font-change correction included in the next version, followed by a source release on GitHub and a direct ZIP download. They also requested this Markdown handoff and links to the project in the main-page header and About section.
+This is maintenance of the user's own ESP32 watch transmitter. The latest request is to read the watch battery during Bluetooth sync and show it on Watch (BLE) and the overview’s top Watch card, followed by a versioned source release and a direct Arduino-source ZIP. The earlier panic/font corrections must be preserved. They also requested this Markdown handoff and links to the project in the main-page header and About section.
 
-**Status at handoff: V4.11 is the source release for the scan fix, font correction and project links. Cloud tests and the Node32s compile passed; it has not yet been tested on the user's ESP32/watch.** A successful compile or host test does not establish physical device/watch behavior.
+**Status at handoff: V4.12 adds GW-BX5600 battery estimates during sync and both requested UI displays. It retains V4.11’s scan fix, font correction and project links. Cloud validation is recorded in `docs/V4.12-review.md`; physical ESP32/watch acceptance remains outstanding.** A successful compile or host test does not establish physical device/watch behavior.
 
-Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, and `docs/V4.11-review.md` before editing. Preserve existing user changes.
+Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, and `docs/V4.12-review.md` before editing. Preserve existing user changes.
 
 ## Repository and current release
 
 - Repository: <https://github.com/whitto/time-transmitter>.
 - Cloud checkout: `/workspace/time-transmitter`, branch `main`.
-- Current release: **V4.11**, tag `v4.11`; resolve its commit with `git rev-parse v4.11^{commit}`.
-- V4.11 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.11>.
-- V4.11 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.11.zip>.
-- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.11/docs/SESSION_HANDOFF.md>.
+- Current release: **V4.12**, tag `v4.12`; resolve its commit with `git rev-parse v4.12^{commit}`.
+- Previous V4.11 release commit: `9edbdc2462b76757cabba9ca689e62689c6e93b8`.
+- V4.12 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.12>.
+- V4.12 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.12.zip>.
+- Arduino files only: <https://github.com/whitto/time-transmitter/releases/download/v4.12/RadioClock_V4_12_Arduino_Source.zip>.
+- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.12/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.
 - V4.10 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.10>.
 - V4.10 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.10.zip>.
-- Current active source: `firmware/RadioClock_V4_11/RadioClock_V4_11.ino`; V4.10 is retained for comparison.
-- The current version contains `RadioBleScanControl.h`, the corrected font helper, tests, project links and this handoff. Check `git status` and actual diffs before editing; later work may have progressed.
+- Current active source: `firmware/RadioClock_V4_12/RadioClock_V4_12.ino`; V4.11 and V4.10 is retained for comparison.
+- The current version contains `CasioWatchBattery.h`, per-profile battery status in RAM, `RadioBleScanControl.h`, the corrected font helper, tests, project links and this handoff. Check `git status` and actual diffs before editing; later work may have progressed.
 - UI source: `ui/radioclock.html`; approved layout reference: `ui/v32_ui_mockup.png`.
-- The previous V4.10 ZIP was downloaded and verified against all 145 tracked release files. Repeat that verification for the next published version.
+- The previous V4.11 ZIP was downloaded and verified against all 162 tracked release files. Repeat that verification for each published version, including the Arduino-source-only ZIP.
+
+## V4.12 battery feature
+
+The identified GW-BX5600 uses GET **0x28** on `26eb002c` with **Write Without Response**, replying on TIME/all-features `26eb002d`. Observed replies are exactly nine bytes. Byte 1 is the calibrated raw battery level: **14–24 maps to 0–100% in 10% steps**, clamped at either end. Actual BX captures are `281418000000020000` (60%, D-button session) and `281821000000020000` (100%, official app). The standard Battery Service is not required or assumed.
+
+The optional read runs before SP step 1 and final TIME; its reply wait is limited to 1.5 seconds including the 300 ms notification assembly gap. Discovery/subscription remain existing guarded GATT operations. A battery-only failure does not block time delivery. Readings commit only after successful TIME, after a replacement binding is applied. They are per profile, tied to the address and validated protocol, and kept in **RAM only**. A failed read retains the same watch’s last known sample with a failure status; a replacement cannot inherit that sample. Reboot clears readings.
+
+Each `bt_profiles` API object adds nullable `battery_percent`, `battery_read_at` in Bluetooth civil time, and `battery_status`. The Watch page and top Watch tile follow the selected profile. A real 0% remains distinct from unavailable. Other model protocols show unavailable rather than using the wrong calibration.
+
+Source evidence and build/test results are in `docs/V4.12-review.md`. Test on the device by pressing D once from Timekeeping with RF idle; check the `BT: Watch N battery estimate …` serial line, the two UI displays, reading time, time delivery, font behavior, replacement/profile isolation and restart clearing.
 
 ## Hardware and dependencies
 
@@ -132,11 +144,11 @@ Two changes were approved **for a later version, queued only**:
 1. Keep routine Bluetooth sync history/date/protocol completion information in RAM, preserving persistent watch bindings when pairing changes configuration.
 2. Remove recurring background retries of failed configuration saves; retry only after an explicit user save/retry, retain the previously saved configuration on failure, and acknowledge success only after a durable write.
 
-These remain unchecked in `docs/NEXT_VERSION.md`. Do not silently include them in the panic/font patch. The current V4.10 log's `Config saved atomically` three seconds after a successful sync is evidence of the existing deferred save, not a serial-log file being written.
+These remain unchecked in `docs/NEXT_VERSION.md`. Do not silently include them in unrelated updates. The current V4.10 log's `Config saved atomically` three seconds after a successful sync is evidence of the existing deferred save, not a serial-log file being written.
 
 ## Build and verification workflow
 
-Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all active sketch companion headers, including the new `RadioBleScanControl.h`, and `partitions.csv` beside the `.ino` file.
+Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all active sketch companion headers, including `CasioWatchBattery.h` and `RadioBleScanControl.h`, and `partitions.csv` beside the `.ino` file.
 
 ```bash
 cd /workspace/time-transmitter
@@ -149,19 +161,19 @@ node scripts/test-ui-browser.cjs
 RADIOCLOCK_FQBN='esp32:esp32:node32s:PartitionScheme=no_ota,FlashFreq=40' bash scripts/compile.sh
 ```
 
-Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_11`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. The permanent coordinator regression is `tests/test_ble_scan_control.py`; keep it in the normal test runner. The investigation's native fixtures use the pinned installed NimBLE sources; temporary research files are not additional build dependencies.
+Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_12`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. The permanent coordinator regression is `tests/test_ble_scan_control.py`; keep it in the normal test runner. The investigation's native fixtures use the pinned installed NimBLE sources; temporary research files are not additional build dependencies.
 
-Before release, retain test/compiler/image evidence, record hashes of tested source, review the scope against V4.10, and inspect the actual rendered page against the approved sidebar mockup. The new version must be consistent in the sketch path, firmware label, UI, scripts and README.
+Before release, retain test/compiler/image evidence, record hashes of tested source, review the scope against the previous release, and inspect the actual rendered page against the approved sidebar mockup. The new version must be consistent in the sketch path, firmware label, UI, scripts and README.
 
 ## Cloud validation completed
 
-- `bash scripts/test.sh`: all 25 Python host test cases passed, plus UI handler checks, BX capture checks and the concurrent RF/BLE arbiter stress test. Scan tests include native host-thread ordering, timeouts, RF rechecks, failed stops, 100 host restart cycles and sanitizer checks.
-- `node scripts/test-ui-browser.cjs`: passed the existing controls, persistence/failure behavior and eight sidebar routes.
-- Rendered desktop review: matched the existing sidebar and checked both project links, navigation and no horizontal overflow.
-- Node32s compile: 1,408,676 / 2,097,152 bytes (67%) program storage; 62,056 / 327,680 bytes (18%) global RAM.
-- ESP32 image: DIO, 40 MHz, 4 MB; checksum and validation hash valid.
-- Retained V4.11 cloud ELF SHA256: `7da18ea4cb5a245c446b734890915bdad0aa6234f6bbad0ba067c5fbad58efc0`.
-- Evidence and tested-source hashes: `docs/build-evidence/v4.11/`. No compiled binaries are included in the source release.
+V4.12: all **31 Python host cases**, UI handler and browser checks, captured BX packet checks and concurrent RF/BLE arbiter stress passed. Battery tests include two identified GW-BX5600 captures, exact packet size/channel, fragmented/overflow/late responses, 1.5-second reply deadline, disconnection/RF cancellation, optional failures preserving time, TIME-success-only commit, replacement/profile isolation and no battery flash persistence. The UI tests distinguish 0% from null, retain date/time and previous readings on read failure, switch profiles and clear battery display on simulated restart.
+
+Node32s/core 3.3.12 compile: **1,411,588 / 2,097,152 bytes (67%)** program storage; **62,272 / 327,680 bytes (19%)** global RAM. Firmware image **DIO / 40 MHz / 4 MB**, checksum/hash valid. Retained cloud ELF SHA256: `8e6461917ce730a9cabc53c0e07dd5532790b4494562d46a50705870f23201a0`.
+
+Evidence and tested-source hashes: `docs/build-evidence/v4.12/`; full review: `docs/V4.12-review.md`. Actual overview/watch screenshots were inspected against the approved mockup; all eight sidebar labels and layout remain. No compiled binaries are published. The release includes a separate Arduino-source ZIP containing the complete active sketch folder.
+
+The latest remote README edits (through commit `da0d31f`) were preserved. They report that the watch font changes now work; this is user-reported device behavior, not a cloud hardware test. Battery hardware acceptance and prolonged scan stability still need device confirmation.
 
 ## Device acceptance still needed
 
@@ -178,9 +190,9 @@ No physical ESP32 or Casio watch is attached to the cloud. Ask the user for resu
 ## Release and communication requirements
 
 - User authorization includes fixing both issues and pushing the next release. No extra generic approval step is needed; necessary device evidence is distinct from authorization.
-- Bump to **V4.11** for the released changes. Preserve original author notices, credits and historical version folders.
+- Bump the version for each new released change; the current release is **V4.12**. Preserve original author notices, credits and historical version folders.
 - Publish **source only**; the user did not request compiled binaries.
 - Provide change/fix descriptions and a **direct GitHub tag ZIP link after every release**. Download that ZIP and verify it matches the tested source before reporting success.
-- V4.11 is the current release; preserve its verified source and do not claim a successful physical device test before the user reports one.
+- V4.12 is the current release; preserve its verified source and do not claim a successful physical device test before the user reports one.
 - The user has been frustrated by unrelated cybersecurity warning messages. Those UI/account messages cannot be controlled by this repository; continue ordinary firmware maintenance and report the concrete outcome without claiming to fix the chat platform.
 

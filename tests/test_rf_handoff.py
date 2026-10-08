@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_11/RadioClock_V4_11.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_12/RadioClock_V4_12.ino'
 
 
 def extract_function(source, name):
@@ -46,7 +46,7 @@ MOCKS = r'''
 #include <cstdio>
 #include <ctime>
 #include <initializer_list>
-#include "firmware/RadioClock_V4_11/RadioBleArbiter.h"
+#include "firmware/RadioClock_V4_12/RadioBleArbiter.h"
 #define PIN_RADIO 12
 #define PIN_LED 25
 #define PIN_BUZZ 26

@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_11/RadioClock_V4_11.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_12/RadioClock_V4_12.ino'
 
 
 def balanced_block(source, start):
@@ -81,6 +81,7 @@ MOCKS = r'''
 #include <strings.h>
 #include <vector>
 #include "RadioBleArbiter.h"
+#include "CasioWatchBattery.h"
 #define portENTER_CRITICAL(x) ((void)0)
 #define portEXIT_CRITICAL(x) ((void)0)
 #define portMUX_INITIALIZER_UNLOCKED 0
@@ -699,7 +700,7 @@ class BluetoothWorkflowTest(unittest.TestCase):
                  'bluetoothScanMayStart', 'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
                  'bluetoothControllerNeeded', 'shutdownIdleBluetooth',
                  'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
-                 'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'attemptBluetoothSync', 'serviceBluetoothSync',
+                 'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'commitBluetoothBattery', 'attemptBluetoothSync', 'serviceBluetoothSync',
                  'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
                  'btLastSunday', 'btDayOfYear', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
                  'loadConfig', 'writeConfigNow', 'saveConfig']

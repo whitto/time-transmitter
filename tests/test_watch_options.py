@@ -63,6 +63,7 @@ int sampleTime(struct timeval *tv,void*) {
 }
 #define gettimeofday sampleTime
 void gshockNotifyCallback(NimBLERemoteCharacteristic*,uint8_t*,size_t,bool) {}
+bool readBluetoothWatchBattery() { return false; } // Battery has its own transport/capture tests.
 bool bleOperationCancelled() { return cancelled; }
 void prepareBtResponse(uint8_t header) {
   assert(header==0x13); reply.clear(); btResponseLength=0; btResponseOverflow=false;

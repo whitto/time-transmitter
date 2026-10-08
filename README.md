@@ -1,12 +1,12 @@
-# Time Transmitter — RadioClock V4.11
+# Time Transmitter — RadioClock V4.12
 
 Time Transmitter is an ESP32 project for synchronizing "atomic" watches (Casio and Citizen tested) with a esp32 generating a local LF time signal.  Additionally I've added   Casio Bluetooth time delivery for some supported watches (tested on a Gshock Square GW-BX5600) this project combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
-The transmitter uses a simple GPIO pin a pair of 330 ohm resistors (in parallel) to reduce the GPIO current (thats all I had) and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar)  
+The transmitter uses a simple GPIO pin a pair of 330 ohm resistors (in parallel) to reduce the GPIO current (thats all I had) and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar)
 
-The range of the transmitter (in JJY40E mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary) 
+The range of the transmitter (in JJY40E mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary)
 
 Casio watch font changes (during sync) now work for those who don't want to use the Casio app to change GW-BX5600 fonts.
-Casio GW-BX5600 battery level reporting (after a time sync) is experimental. 
+Casio GW-BX5600 battery level reporting (after a time sync) is experimental.
 
 RF transmission has priority over Bluetooth: scanning and connections stop, the BLE host/controller shut down, and the JJY carrier starts only after shutdown is confirmed. Bluetooth stays off for the whole RF session, including reduced/zero-carrier envelope slots.
 
@@ -27,6 +27,7 @@ Dashboard preview with sample status data.
 - Successful Bluetooth syncs show their date and time in the overview hero, watch card, and quick status. Automatic watch-sync slots are interpreted in the selected Bluetooth timezone plus offset, while LF schedules stay in the JJY/station timezone.
 - A saved blue ESP32 activity LED toggle: Off keeps GPIO2 dark; On flashes during LF transmission or Bluetooth connection/time synchronization. Wi-Fi connection and idle watch listening do not light it.
 - Per-watch GW-BX5600 font selection, applied and checked before the final time command while preserving the watch's 12- or 17-byte settings format; optional controller shutdown between scheduled watch windows.
+- GW-BX5600 battery estimate read during Bluetooth sync, shown with the reading date/time on Watch (BLE) and on the overview’s top Watch card. Readings are per watch, kept in RAM and cleared on reboot.
 - Bluetooth scan operations serialized with NimBLE callbacks, avoiding concurrent scan-completion cleanup and retaining active watch discovery.
 - Diagnostics shows Always Wait state (including RF pause), the next JJY date/time in the station timezone, and reset/memory evidence for troubleshooting.
 - A gzip-compressed web UI, LittleFS configuration storage, and Always on or Scheduled/power-save Wi-Fi.
@@ -61,9 +62,9 @@ The tested target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash
 
 For Arduino IDE, install those board/library versions and open:
 
-`firmware/RadioClock_V4_11/RadioClock_V4_11.ino`
+`firmware/RadioClock_V4_12/RadioClock_V4_12.ino`
 
-Keep all companion headers, including `RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h` and `CasioWatchSettings.h`, and `partitions.csv` beside the sketch. For **ESP32 Dev Module**, select **Flash Size: 4MB (32Mb)** and **Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)**. The default 1.25 MB application partition is too small for this project. On **Node32s**, **No OTA (Large APP)** also provides sufficient compile capacity; the included sketch-local partition table supplies the project's 3 MB application layout. This layout has one application slot and does not support dual-slot OTA updates.
+Keep all companion headers, including `RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h` and `CasioWatchBattery.h`, and `partitions.csv` beside the sketch. For **ESP32 Dev Module**, select **Flash Size: 4MB (32Mb)** and **Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)**. The default 1.25 MB application partition is too small for this project. On **Node32s**, **No OTA (Large APP)** also provides sufficient compile capacity; the included sketch-local partition table supplies the project's 3 MB application layout. This layout has one application slot and does not support dual-slot OTA updates.
 
 In the Codex Linux cloud workspace:
 
@@ -78,7 +79,7 @@ The installer keeps the pinned tools and packages in `/workspace/.radioclock-too
 
 With no saved Wi-Fi credentials, connect to the visible 2.4 GHz setup network **RadioStation_XXXXXX** (device-specific suffix), password **12345678**, and open **http://192.168.4.1**. V4.10 uses the device AP MAC independently of startup events, instead of naming the network from a not-yet-initialized netif. AP success is logged only after the driver, AP-start event, configuration and local IP are ready. Failed initialization logs its stage and retries after five seconds; configuration is not erased. If the device MAC cannot be read, the fallback SSID is **RadioStation_Setup**. Driver readiness does not prove reception on a phone; if the AP remains absent, capture the new serial error and check another nearby 2.4 GHz client.
 
-Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_11`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
+Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_12`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
 
 ## Watch controls
 
@@ -104,6 +105,8 @@ In **Settings**, **Flash blue ESP32 LED on activity** controls the onboard GPIO2
 
 In **Watch (BLE)**, select the GW-BX5600 profile, enable **Apply watch font during BT sync**, then select **Standard (new font)** or **Classic**. The choice saves for that profile and applies during the next Bluetooth sync with this ESP32. Off keeps the current font untouched. V4.11 reads the watch's 12- or 17-byte settings packet, preserves its length and unrelated bytes, changes only the font bit and reads it back before the final time command. It calculates the current time after the font transaction so the delivered time includes that elapsed work. A font error is reported separately from a successful time delivery. A phone-only sync cannot use an ESP32 setting; the watch must connect to RadioClock.
 
+During each **GW-BX5600** Bluetooth sync, V4.12 requests the watch’s battery condition before the required time handshake. It shows a battery **estimate in 10% steps** for the selected watch profile, plus the last reading date/time in the Bluetooth timezone and offset. A missing or malformed reply does not prevent a time attempt. The 1.5-second battery reply deadline preserves the existing 5-second SP/font reply deadlines. Readings stay in RAM and clear on reboot; a replacement watch cannot inherit the old watch’s reading. Other watch protocols show unavailable because their calibration has not been validated. This feature adds no flash writes. See [the battery protocol and validation](docs/V4.12-review.md).
+
 In **Settings**, **Power down idle Bluetooth** turns the Bluetooth controller off outside scheduled listening windows and wakes for explicit Pair Watch/Sync Now requests. **Always Wait** takes priority; turn it off to obtain controller savings. For additional savings use the existing Wi-Fi power-save mode and disable the blue LED. This option preserves the CPU clock/RF scheduler and does not enable deep or full-chip light sleep. See [the power-saving assessment](docs/V4.6-power-saving.md).
 
 **Disable Wi-Fi sleep / Keep Wi-Fi always on** uses the existing Wi-Fi power-mode enum: enabled is Always on (`0`); disabled is Scheduled/power-save (`1`). It also applies the corresponding Wi-Fi driver sleep setting. There is no independent persistent sleep flag.
@@ -118,9 +121,11 @@ The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and
 
 Before publishing, compare the rendered UI against the user's request and the approved mockup. Ask before changing the fundamental layout or deviating from that design. These release requirements are recorded in `AGENTS.md`.
 
-[Download the V4.11 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.11.zip).
+[Download the V4.12 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.12.zip).
 
-[Download the session handoff Markdown](https://raw.githubusercontent.com/whitto/time-transmitter/v4.11/docs/SESSION_HANDOFF.md).
+[Download only the Arduino source files](https://github.com/whitto/time-transmitter/releases/download/v4.12/RadioClock_V4_12_Arduino_Source.zip).
+
+[Download the session handoff Markdown](https://raw.githubusercontent.com/whitto/time-transmitter/v4.12/docs/SESSION_HANDOFF.md).
 
 After editing the UI, regenerate its embedded gzip asset and run checks:
 
@@ -132,11 +137,11 @@ bash scripts/compile.sh
 
 The checks run the actual UI script against mocked APIs, compile extracted firmware functions against host mocks, stress the real atomic RF/BLE arbiter concurrently, and verify gzip, DOM references, API routes, versions, and partition bounds. They exercise state transitions and failures; they do not emulate the ESP32 radio or prove the watch display changed. With Playwright and Chromium installed, run `node scripts/test-ui-browser.cjs` for the real-browser schedule, toggle and pairing regressions; set `RADIOCLOCK_CHROMIUM` if the browser executable is elsewhere.
 
-V4.11 serializes scan start/stop with the NimBLE host callbacks, disables the affected independent scan-response timer while retaining active scanning, and corrects the GW-BX5600 font packet length and transaction order. Its verification is recorded in `docs/V4.11-review.md`; physical watch/device acceptance is still required. V4.10 derives a stable setup SSID before AP-start events, checks AP readiness and retries failed starts without writing configuration. V4.9 fixes the V4.8 cold setup boot assertion by avoiding SNTP shutdown before its client/network startup. V4.8 introduced Wi-Fi/NTP recovery, Settings power controls and clearer watch delivery. The queued runtime flash-write changes remain pending. See `docs/V4.11-review.md` for the new review and `docs/SESSION_HANDOFF.md` for the current continuation instructions. `docs/V4.10-review.md` records the previous release checks. `docs/V4.5-review.md`, `docs/V4.2-review.md` and `docs/V3.5-review.md` record earlier changes and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
+V4.11 serializes scan start/stop with the NimBLE host callbacks, disables the affected independent scan-response timer while retaining active scanning, and corrects the GW-BX5600 font packet length and transaction order. Its verification is recorded in `docs/V4.11-review.md`; physical watch/device acceptance is still required. V4.10 derives a stable setup SSID before AP-start events, checks AP readiness and retries failed starts without writing configuration. V4.9 fixes the V4.8 cold setup boot assertion by avoiding SNTP shutdown before its client/network startup. V4.8 introduced Wi-Fi/NTP recovery, Settings power controls and clearer watch delivery. The queued runtime flash-write changes remain pending. See `docs/V4.12-review.md` for the current battery review and `docs/V4.11-review.md` for scan/font evidence and `docs/SESSION_HANDOFF.md` for the current continuation instructions. `docs/V4.10-review.md` records the previous release checks. `docs/V4.5-review.md`, `docs/V4.2-review.md` and `docs/V3.5-review.md` record earlier changes and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
 
 ## Build status
 
-V4.11 uses the classic ESP32 Node32 / ESP32 Dev Module target, Arduino-ESP32 3.3.12 toolchain and 3 MB application partition. Repository checks target the V4.11 sketch, including the scan coordinator, font packets/readback and order, idle controller shutdown/wake, LED activity/persistence, clock/encoder, Bluetooth/RF and browser behavior. All 25 host test cases, browser checks and the Node32s compile passed; the image checksum/hash are valid. The build uses 1,408,676 bytes of program storage and 62,056 bytes of global RAM. Evidence is recorded in `docs/V4.11-review.md`. Physical watch, RF and LED acceptance remain device tests.
+V4.12 uses the classic ESP32 Node32 / ESP32 Dev Module target, Arduino-ESP32 3.3.12 toolchain and 3 MB application partition. All **31 Python host cases**, UI handler/browser regressions and the Node32s compile passed. Checks include captured battery calibration, notification routing, optional-read failures, fresh TIME ordering, profile/replacement isolation, RAM-only battery storage and the existing scan/RF/font/configuration behavior. The image checksum/hash are valid. The build uses **1,411,588 bytes** of program storage and **62,272 bytes** of global RAM. Evidence and rendered UI comparisons are recorded in [docs/V4.12-review.md](docs/V4.12-review.md). Physical battery read acceptance remains a device test; the user's latest README update reports that font changes now work.
 
 ## Credits and provenance
 
@@ -146,7 +151,7 @@ The supplied RadioClock source retains these original credits:
 - **5Breeze** — [ClockWaveXmitter](https://github.com/5Breeze/ClockWaveXmitter) improvements, copyright **2025**; the source identifies web UI, Wi-Fi configuration, multi-station scheduling, and station rotation additions. Its README also credits nisejjy and requests source credit for redistribution, adaptation, or commercial use.
 - **RadioClock V2.7 through V3.2.2** — the supplied firmware lineage and baseline used for this project's V3.5 continuation. The V3.2.1 source is preserved in `baseline/` for comparison.
 
-Those copyright notices remain in the firmware headers. V4.11 preserves the V4.1 dashboard and V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration and build tooling, with the final-review corrections described above.
+Those copyright notices remain in the firmware headers. V4.12 preserves the V4.1 dashboard and V3.5 BLE lifecycle/write-mode corrections, transactional pairing, passive listening, RF/BLE arbitration and build tooling, with the scan/font corrections and battery reporting described above.
 
 The project also uses these libraries and platforms:
 
@@ -154,8 +159,8 @@ The project also uses these libraries and platforms:
 - [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) — the NimBLE-based Bluetooth stack maintained by h2zero and contributors, building on Apache Mynewt NimBLE.
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) — JSON parsing and serialization by Benoît Blanchon and contributors.
 - [Arduino CLI](https://github.com/arduino/arduino-cli) — reproducible cloud builds and dependency installation.
-- [izivkov/gshock-smart-sync-webapp](https://github.com/izivkov/gshock-smart-sync-webapp) — reference for the basic-settings font byte/bit and characteristic mapping. The font helper is independently implemented and preserves the other watch settings; the checked reference is commit `5b3ff83dbae43a7a526232e5f35de98425ca7ac8`.
-- [izivkov/gshock_api](https://github.com/izivkov/gshock_api) — public GW-BX5600 official-app Bluetooth captures used to check the SP packet structure. The BX1 packet helper was implemented independently from those observations.
+- [izivkov/gshock-smart-sync-webapp](https://github.com/izivkov/gshock-smart-sync-webapp) — reference for the basic-settings font byte/bit, GW-BX5600 battery calibration and characteristic mapping. The font helper is independently implemented and preserves the other watch settings; the checked reference is commit `5b3ff83dbae43a7a526232e5f35de98425ca7ac8`.
+- [izivkov/gshock_api](https://github.com/izivkov/gshock_api) — public GW-BX5600 Bluetooth captures used to check SP packet structure and battery-condition requests/replies. The BX1 packet helper was implemented independently from those observations.
 
 The JJY implementation references [NICT's time-signal specification](https://jjy.nict.go.jp/jjy/trans/index-e.html). Firmware comments also acknowledge NIST (WWVB), PTB (DCF77), NPL (MSF), and BPC signal specifications. These are standards references, separate from source-code authorship.
 

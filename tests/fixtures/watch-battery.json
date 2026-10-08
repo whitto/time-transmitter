@@ -1,0 +1,15 @@
+{
+  "model": "GW-BX5600",
+  "protocol_source": "https://github.com/izivkov/gshock_api/blob/ae817310dd9551d5e6e53ee61d89af4e8d954767/src/gshock_api/iolib/watch_condition_io.py",
+  "calibration_source": "https://github.com/izivkov/gshock-smart-sync-webapp/blob/5b3ff83dbae43a7a526232e5f35de98425ca7ac8/src/api/WatchInfo.ts",
+  "capture_source": "https://github.com/izivkov/gshock_api/tree/ae817310dd9551d5e6e53ee61d89af4e8d954767/test_data",
+  "request": "28",
+  "request_mode": "write-without-response",
+  "reply_channel": "26eb002d-b012-49a8-b1f8-394fb2032b0f",
+  "raw_min": 14,
+  "raw_max": 24,
+  "packets": [
+    {"capture": "btsnoop_hci-bx2.log", "request_frame": 1224, "reply_frame": 1226, "reply": "281418000000020000", "percent": 60},
+    {"capture": "btsnoop_hci_bx3_official_app.log", "request_frame": 722, "reply_frame": 724, "reply": "281821000000020000", "percent": 100}
+  ]
+}
