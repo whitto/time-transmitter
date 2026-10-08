@@ -1,1 +1,0 @@
-Browser regressions passed: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.
