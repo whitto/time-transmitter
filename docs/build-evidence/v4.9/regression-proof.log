@@ -1,0 +1,18 @@
+test_real_wifi_ntp_recovery (test_wifi_ntp_recovery.WifiNtpRecoveryTest.test_real_wifi_ntp_recovery) ... wifi: /tmp/tmpzi9ws0h1/wifi.cpp:148: void esp_sntp_stop(): Assertion `networkInitialized && "Invalid mbox: stop before TCP/IP startup"' failed.
+ERROR
+
+======================================================================
+ERROR: test_real_wifi_ntp_recovery (test_wifi_ntp_recovery.WifiNtpRecoveryTest.test_real_wifi_ntp_recovery)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/time-transmitter/tests/test_wifi_ntp_recovery.py", line 304, in test_real_wifi_ntp_recovery
+    subprocess.run([str(output)], check=True)
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/tmp/tmpzi9ws0h1/wifi']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 1.292s
+
+FAILED (errors=1)
+EXPECTED BASELINE FAILURE: V4.8 calls SNTP stop before TCP/IP initialization.

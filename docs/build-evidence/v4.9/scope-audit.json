@@ -1,0 +1,16 @@
+{
+  "baseline": "6c65c18 (V4.8)",
+  "normalized_source_match": true,
+  "allowed_firmware_changes": [
+    "version metadata and embedded UI version",
+    "guard exactly three SNTP shutdown calls"
+  ],
+  "files_unchanged": {
+    "RadioBleArbiter.h": true,
+    "CasioBxProtocol.h": true,
+    "CasioWatchSettings.h": true,
+    "partitions.csv": true
+  },
+  "sketch_sha256": "a59da2e6ce707ca1d13c766d118537a90060d4a2352adaa9436f630426b13de5",
+  "ui_sha256": "564e5bc03faa2060b45e0b8bb321e44dfef604b68eb56e8ef707bc2faa2fe0d0"
+}

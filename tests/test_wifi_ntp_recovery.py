@@ -28,6 +28,7 @@ constexpr unsigned long WIFI_CONNECT_TIMEOUT = 30000;
 constexpr unsigned long WIFI_BOOT_ON_DURATION_MS = 300000;
 constexpr const char* DEVICENAME_PREFIX = "RadioStation";
 struct IPAddress { String toString() const { return "192.0.2.1"; } };
+bool networkInitialized=true;
 struct WiFiMock {
   int connection = 0, modeValue = WIFI_AP, begins = 0, reconnects = 0;
   int apCloses = 0, apStarts = 0, disconnects = 0, modes = 0;
@@ -37,7 +38,7 @@ struct WiFiMock {
   std::string apName;
   int status() const { return connection; }
   int getMode() const { return modeValue; }
-  bool mode(int value) { ++modes; if (!modeOk) return false; modeValue=value; return true; }
+  bool mode(int value) { ++modes; if (!modeOk) return false; modeValue=value; if (value!=WIFI_OFF) networkInitialized=true; return true; }
   bool setSleep(bool value) { sleep=value; return true; }
   void begin(const char* ssid, const char*) { assert(std::strcmp(ssid,"Cloud")==0); ++begins; }
   void reconnect() { ++reconnects; }
@@ -106,7 +107,7 @@ void sntp_set_time_sync_notification_cb(void (*cb)(struct timeval*)) { ntpCallba
 void sntp_set_sync_mode(int mode) { assert(mode==SNTP_SYNC_MODE_IMMED); }
 void sntp_set_sync_interval(uint32_t ms) { intervalMs=ms; }
 bool esp_sntp_enabled() { return ntpEnabled; }
-void esp_sntp_stop() { ++ntpStops; ntpEnabled=false; }
+void esp_sntp_stop() { assert(networkInitialized && "Invalid mbox: stop before TCP/IP startup"); ++ntpStops; ntpEnabled=false; }
 bool sntp_restart() { ++restarts; return restartOk && ntpEnabled; }
 void configTzTime(const char* tz,const char* a,const char* b) {
   assert(std::strcmp(tz,"AEST-10")==0 && std::strcmp(a,"pool.ntp.org")==0 &&
@@ -128,7 +129,7 @@ void ntpstop();
 void startAPMode();
 bool stopAPMode();
 void reset() {
-  Serial.log.clear(); WiFi=WiFiMock{};
+  Serial.log.clear(); WiFi=WiFiMock{}; networkInitialized=true;
   server.stops=server.starts=0; webServerStarted=true;
   ap_mode=true;wifiConnectionPending=false;wifiRecoveryWindowActive=false;ntpResumePending=false;
   wifiRecoveryStarted=0;wifi_connect_start=0;wifiRadioEnabled=true;
@@ -144,6 +145,26 @@ void reset() {
 
 CASES = r'''
 int main() {
+  // Model the reported no-credentials cold boot: no Wi-Fi or TCP/IP task
+  // exists yet. The SDK stop wrapper posts to tcpip_callback even when
+  // SNTP is not running, while its enabled query only reads static state.
+  reset();networkInitialized=false;WiFi.modeValue=WIFI_OFF;
+  webServerStarted=false;radioTaskHandle=nullptr;
+  startAPMode();
+  assert(networkInitialized && ap_mode && WiFi.modeValue==WIFI_AP);
+  assert(webServerStarted && WiFi.apStarts==1 && ntpStops==0);
+  reset();networkInitialized=false;WiFi.modeValue=WIFI_OFF;ap_mode=false;
+  beginWifiCredentialConnection();
+  assert(networkInitialized && wifiConnectionPending && ntpStops==0);
+  reset();networkInitialized=false;WiFi.modeValue=WIFI_OFF;
+  ntpstop();assert(ntpStops==0 && !networkInitialized);
+
+  // The guards must still stop an active client during real shutdown and
+  // transitions, rather than merely suppressing all NTP stop calls.
+  reset();ntpEnabled=true;startAPMode();assert(ntpStops==1 && !ntpEnabled);
+  reset();ntpEnabled=true;beginWifiCredentialConnection();assert(ntpStops==1 && !ntpEnabled);
+  reset();ntpEnabled=true;ntpstop();assert(ntpStops==1 && !ntpEnabled);
+
   reset();
   // Provisioning keeps the AP usable until DHCP/got-IP, without repeatedly
   // restarting association or claiming an NTP reply before its callback.

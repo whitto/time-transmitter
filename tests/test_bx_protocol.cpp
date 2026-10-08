@@ -1,4 +1,4 @@
-#include "../firmware/RadioClock_V4_8/CasioBxProtocol.h"
+#include "../firmware/RadioClock_V4_9/CasioBxProtocol.h"
 
 #include <algorithm>
 #include <array>
