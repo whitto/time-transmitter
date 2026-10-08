@@ -3,7 +3,9 @@
 Time Transmitter is an ESP32 project for synchronizing "atomic" watches (Casio and Citizen tested) with a esp32 generating a local LF time signal.  Additionally I've added   Casio Bluetooth time delivery for some supported watches (tested on a Gshock Square GW-BX5600) this project combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin a pair of 330 ohm resistors (in parallel) to reduce the GPIO current (thats all I had) and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar)  
 
-The range of the transmitter (in JJY40E mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary) Casio watch font changes (during sync) have a bug thats being worked on.
+The range of the transmitter (in JJY40E mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary) 
+
+Casio watch font changes (during sync) now work for those who don't want to use the Casio app to change GW-BX5600 fonts.
 
 RF transmission has priority over Bluetooth: scanning and connections stop, the BLE host/controller shut down, and the JJY carrier starts only after shutdown is confirmed. Bluetooth stays off for the whole RF session, including reduced/zero-carrier envelope slots.
 
