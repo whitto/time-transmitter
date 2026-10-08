@@ -1,9 +1,9 @@
 # Time Transmitter — RadioClock V4.10
 
 Time Transmitter is an ESP32 project for synchronizing watches with local LF time signals or Casio Bluetooth time delivery. It combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
-The transmitter uses a simple GPIO pin and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar),  the observed range of the transmitter (in JJY40 mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary)
+The transmitter uses a simple GPIO pin and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar),  the observed range of the transmitter (in JJY40 mode) is approximately 3-5 meters.  Which is much more than expected, and heaps for me (your results may vary) casio watch font changes during sync have a bug thats being worked on.
 
-RF transmission has priority: scanning and connections stop, the BLE host/controller shut down, and the carrier starts only after shutdown is confirmed. Bluetooth stays off for the whole RF session, including reduced/zero-carrier envelope slots.
+RF transmission has priority over Bluetooth: scanning and connections stop, the BLE host/controller shut down, and the JJY carrier starts only after shutdown is confirmed. Bluetooth stays off for the whole RF session, including reduced/zero-carrier envelope slots.
 
 ![RadioClock V4 dashboard preview](ui/v4_dashboard.png)
 
