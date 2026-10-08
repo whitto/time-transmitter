@@ -1,0 +1,4 @@
+PASS: exact source comparison allows only reviewed AP startup/retry, its loop gates and version/comment metadata
+PASS: 3 companion headers and partitions byte-identical
+PASS: UI change is version metadata only
+PASS: queued flash-write changes unchanged and unchecked

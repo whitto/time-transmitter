@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.9', radio_active: false, station: -1,
+  firmware_version: 'V4.10', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -150,7 +150,7 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.9');
+assert.equal(element('fw').textContent, 'V4.10');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'Flash on activity');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');

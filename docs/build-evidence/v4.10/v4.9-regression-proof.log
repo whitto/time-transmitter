@@ -1,0 +1,5 @@
+V4.9 zero-netif MAC naming: EXPECTED FAILURE reproduces old behavior (exit -6)
+baseline: /tmp/tmpkh3kr6yq/baseline.cpp:489: int main(): Assertion `WiFi.apName=="RadioStation_AABBCC"' failed.
+
+V4.9 failed softAP false success: EXPECTED FAILURE reproduces old behavior (exit -6)
+baseline: /tmp/tmpkh3kr6yq/baseline.cpp:489: int main(): Assertion `!webServerStarted && Serial.log.find("AP Mode started.")==std::string::npos' failed.
