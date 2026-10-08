@@ -123,7 +123,7 @@ Before publishing, compare the rendered UI against the user's request and the ap
 
 [Download the V4.12 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.12.zip).
 
-[Download only the Arduino source files](https://github.com/whitto/time-transmitter/releases/download/v4.12/RadioClock_V4_12_Arduino_Source.zip).
+[Download only the Arduino source files](https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.12.zip).
 
 [Download the session handoff Markdown](https://raw.githubusercontent.com/whitto/time-transmitter/v4.12/docs/SESSION_HANDOFF.md).
 

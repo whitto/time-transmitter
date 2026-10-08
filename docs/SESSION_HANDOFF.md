@@ -18,7 +18,7 @@ Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, and `docs/V4.12-
 - Previous V4.11 release commit: `9edbdc2462b76757cabba9ca689e62689c6e93b8`.
 - V4.12 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.12>.
 - V4.12 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.12.zip>.
-- Arduino files only: <https://github.com/whitto/time-transmitter/releases/download/v4.12/RadioClock_V4_12_Arduino_Source.zip>.
+- Arduino files only: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.12.zip>.
 - Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.12/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.
 - V4.10 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.10>.
