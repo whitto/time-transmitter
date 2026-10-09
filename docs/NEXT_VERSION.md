@@ -1,5 +1,9 @@
 # Next version updates
 
+## Required for the next and every future release
+
+- [ ] Update the changelog at the top of the active Arduino `.ino` sketch with the latest version/build, release date, features, fixes and dependency/installation changes. Keep newest notes first, preserve prior notes/original credits and check consistency with GitHub release notes before publication. Requested 10 October 2026 (Brisbane).
+
 ## V4.15 — nine further reliability corrections
 
 All nine findings below were queued on 9 October 2026 and then explicitly authorized for immediate correction. They are implemented in **V4.15 R1**. The original [post-publication review](V4.14-R2-post-publication-review.md) preserves the failure evidence; the [V4.15 review](V4.15-review.md) records corrections and focused checks. The pre-publication reliability review and focused checks passed; the published R1 then passed all 77 unittest cases and full/additional browser checks. No revision was required. The ESP32 compile was stopped at the user’s request, with no board-build result claimed. Five direct source ZIPs were verified. Physical acceptance remains outstanding.
