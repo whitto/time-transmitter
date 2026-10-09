@@ -1,0 +1,156 @@
+{
+  "verified_at_utc": "2026-10-09T23:16:40.050981+00:00",
+  "method": "Direct GitHub tag ZIP download; complete path inventory and bytewise comparison with git ls-tree and git cat-file blobs for the corresponding immutable tag.",
+  "firmware_source_commit": "ba3c30ac46cb975dcca909cd17cf7da2b4775d8d",
+  "compiled_binary_scan": {
+    "suffixes": [
+      ".a",
+      ".bin",
+      ".class",
+      ".dll",
+      ".elf",
+      ".exe",
+      ".hex",
+      ".o",
+      ".out",
+      ".pyc",
+      ".pyo",
+      ".so",
+      ".uf2",
+      ".wasm"
+    ],
+    "magic": [
+      "ELF",
+      "PE signature"
+    ]
+  },
+  "downloads": [
+    {
+      "tag": "v4.15",
+      "url": "https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15.zip",
+      "tag_object": "6a623c5c7e5e50f3bd9d402310341f1922849949",
+      "tag_commit": "ba3c30ac46cb975dcca909cd17cf7da2b4775d8d",
+      "archive_sha256": "64e7417fb25fae2b534af3afa409f4d5620175939e504207abc80866fbe96b40",
+      "archive_bytes": 15514280,
+      "archive_root": "time-transmitter-4.15",
+      "file_count": 801,
+      "top_level_file_counts": {
+        ".gitignore": 1,
+        "AGENTS.md": 1,
+        "README.md": 1,
+        "baseline": 1,
+        "diff": 1,
+        "docs": 153,
+        "firmware": 85,
+        "libraries": 511,
+        "old versions": 1,
+        "scripts": 15,
+        "tests": 27,
+        "ui": 4
+      },
+      "every_file_bytewise_matches_tag_tree": true,
+      "missing_files": [],
+      "unexpected_files": [],
+      "changed_files": [],
+      "compiled_binary_files": []
+    },
+    {
+      "tag": "arduino-v4.15",
+      "url": "https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15.zip",
+      "tag_object": "151266f3aa921c91450253bca04f610b0c45b3c9",
+      "tag_commit": "9989a02ddd5245de066c1dbf28f58a821abcc3e6",
+      "archive_sha256": "71a22a96e154fd33b336156c675da359aa5ba342c74b79d399b6d00350d69545",
+      "archive_bytes": 1849000,
+      "archive_root": "time-transmitter-arduino-v4.15",
+      "file_count": 526,
+      "top_level_file_counts": {
+        "NimBLE-Arduino": 478,
+        "RadioBoundedWebServer": 28,
+        "RadioClock_V4_15": 15,
+        "RadioCrashDumpGate": 5
+      },
+      "every_file_bytewise_matches_tag_tree": true,
+      "missing_files": [],
+      "unexpected_files": [],
+      "changed_files": [],
+      "compiled_binary_files": [],
+      "complete_sketch_and_three_libraries_confirmed": true,
+      "every_file_matches_corresponding_full_release_source": true
+    },
+    {
+      "tag": "webserver-v3.3.12-radio-v1",
+      "url": "https://github.com/whitto/time-transmitter/archive/refs/tags/webserver-v3.3.12-radio-v1.zip",
+      "tag_object": "d8fecdd10c56b1fd171b84db9510e89e3910647b",
+      "tag_commit": "cd0276753505f7fa720cee9d38399d45fbf48a28",
+      "archive_sha256": "bb69a9804c94a771f2092fcdae0dce28c2a8ac479dbbb9c11c8260cc6610d4f4",
+      "archive_bytes": 66754,
+      "archive_root": "time-transmitter-webserver-v3.3.12-radio-v1",
+      "file_count": 28,
+      "top_level_file_counts": {
+        "LICENSE-LGPL-2.1.txt": 1,
+        "RADIOCLOCK_PATCH.diff": 1,
+        "RADIOCLOCK_SOURCE_MANIFEST.json": 1,
+        "RADIOCLOCK_UPSTREAM_SHA256.json": 1,
+        "README.md": 1,
+        "library.properties": 1,
+        "src": 22
+      },
+      "every_file_bytewise_matches_tag_tree": true,
+      "missing_files": [],
+      "unexpected_files": [],
+      "changed_files": [],
+      "compiled_binary_files": [],
+      "every_file_matches_corresponding_full_release_source": true
+    },
+    {
+      "tag": "nimble-v2.5.1-radio-r2",
+      "url": "https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip",
+      "tag_object": "53edeb973213408ffed79933296dfe706132bd29",
+      "tag_commit": "f6f949e949767ec8ac7f058fbdbe09b8a572cc4e",
+      "archive_sha256": "3d18cc164f3ff8782aa074e33006ecbcca7a8d799b2ce360343805f8d67d5501",
+      "archive_bytes": 1621534,
+      "archive_root": "time-transmitter-nimble-v2.5.1-radio-r2",
+      "file_count": 478,
+      "top_level_file_counts": {
+        "CHANGELOG.md": 1,
+        "LICENSE": 1,
+        "NOTICE": 1,
+        "RADIOCLOCK_HOST_TIMER_FIX.patch": 1,
+        "RADIOCLOCK_SOURCE_MANIFEST.json": 1,
+        "README.md": 1,
+        "README_RADIOCLOCK.md": 1,
+        "docs": 8,
+        "examples": 28,
+        "library.properties": 1,
+        "src": 434
+      },
+      "every_file_bytewise_matches_tag_tree": true,
+      "missing_files": [],
+      "unexpected_files": [],
+      "changed_files": [],
+      "compiled_binary_files": [],
+      "every_file_matches_corresponding_full_release_source": true
+    },
+    {
+      "tag": "crash-gate-v1.0.0",
+      "url": "https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip",
+      "tag_object": "90a164a2dc11a1b858e59222c7371a2444cfa921",
+      "tag_commit": "d08df031095d59bcf9e6101d4ed3e8c673ae7776",
+      "archive_sha256": "eb264d9c40102279920f577cd646ffabe7d666b2031d678d344b6f74961d5411",
+      "archive_bytes": 4731,
+      "archive_root": "time-transmitter-crash-gate-v1.0.0",
+      "file_count": 5,
+      "top_level_file_counts": {
+        "README.md": 1,
+        "library.properties": 1,
+        "src": 3
+      },
+      "every_file_bytewise_matches_tag_tree": true,
+      "missing_files": [],
+      "unexpected_files": [],
+      "changed_files": [],
+      "compiled_binary_files": [],
+      "every_file_matches_corresponding_full_release_source": true
+    }
+  ]
+}

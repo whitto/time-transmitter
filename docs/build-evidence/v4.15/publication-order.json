@@ -1,0 +1,16 @@
+{
+  "firmware_source_commit": "ba3c30ac46cb975dcca909cd17cf7da2b4775d8d",
+  "source_tag": "v4.15",
+  "github_release_published_at_utc": "2026-10-09T23:15:10Z",
+  "pre_publication": "Independent embedded reliability review, focused fault regressions, rendered UI comparison and source pin checks passed.",
+  "post_publication": {
+    "full_test_script_exit_code": 0,
+    "unittest_cases": 77,
+    "unittest_groups": 23,
+    "full_browser_exit_code": 0,
+    "additional_feature_browser_exit_code": 0,
+    "direct_source_zips_verified": 5
+  },
+  "esp32_compile": "Stopped at subsequent explicit user request; no board-build or ELF result claimed.",
+  "firmware_changes_after_publication": false
+}

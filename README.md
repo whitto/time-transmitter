@@ -191,7 +191,7 @@ Clock acquisition, Wi-Fi power faults and timer retry budgets are available in D
 
 ## Build status
 
-V4.15’s pre-publication reliability review and focused fault tests are recorded in [docs/V4.15-review.md](docs/V4.15-review.md). Following the requested workflow, source is published before the complete suite; full test/browser/Node32s compile results are added to the release notes afterward. A failed complete check requires a reviewed and published numbered revision. Physical ESP32/watch soak and fault acceptance remain necessary; no physical device is attached to the cloud.
+V4.15 R1 is published and passed all **77 unittest cases across 23 groups**, the complete browser suite and additional Watch history/uptime checks. The fresh embedded reliability review and focused fault tests passed before publication; the full checks ran afterward, as requested. All five source ZIP downloads match their tags byte-for-byte, including the Arduino sketch and all three libraries. **The ESP32 compile was stopped at the user’s request; no board-build/ELF result is claimed.** See [the release review](docs/V4.15-review.md), [complete release notes](docs/V4.15-release-notes.md) and [retained evidence](docs/build-evidence/v4.15). Physical ESP32/watch soak and fault acceptance remain necessary; no physical device is attached to the cloud.
 
 ## Credits and provenance
 
