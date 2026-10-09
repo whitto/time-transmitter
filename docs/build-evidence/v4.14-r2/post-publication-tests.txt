@@ -1,0 +1,187 @@
+PASS: gzip round-trip (27,831 bytes), JavaScript syntax, 175 DOM IDs, 10 UI routes, V4.14 versions, 4 MB partitions
+Battery UI checks passed: 0/null/60/100%, per-watch selection, read date/status, retained failure and restart.
+V4.14 crash toggle checks passed: default Off, persistence, rollback, pending/late reads, unsupported core and independent daily BT history.
+V4.14 UI checks passed: history persistence toggle/rollback/races, independent overnight Wi-Fi drafts/save/power mode, live RF/AP states and restored diagnostics.
+UI handler tests passed: font profile selection/persistence/rollback/stale reads, idle BT power saving, LED, schedules and existing sync/pair behavior.
+Diagnostics summary checks passed: Always Wait, RF pause, next-day JJY, active windows, full-time overrides and unknown clock.
+V4.14 R2 polling reliability checks passed: page/visibility gating, bounded/coalesced requests, timeout recovery, invalid JSON, out-of-order config, saved settings protection and explicit fault-only storage recovery.
+BLE lifecycle, RF cancellation, MTU guards, ATT errors, authentication retry and SP_DATA notifications passed
+.BLE lifecycle, RF cancellation, MTU guards, ATT errors, authentication retry and SP_DATA notifications passed
+.
+----------------------------------------------------------------------
+Ran 2 tests in 5.756s
+
+OK
+.PASS: NimBLE-Arduino 2.5.1-radioclock.1, 475 upstream files, 9 documented source changes
+...
+----------------------------------------------------------------------
+Ran 4 tests in 1.403s
+
+OK
+Scan coordinator scenario passed: queued-start
+Scan coordinator scenario passed: queued-stop
+Scan coordinator scenario passed: start-timeout
+Scan coordinator scenario passed: late-stop
+Scan coordinator scenario passed: failed-stop
+Scan coordinator scenario passed: rf-priority
+Scan coordinator scenario passed: start-failure
+Scan coordinator scenario passed: cycles
+.Scan coordinator scenario passed: cycles
+.Scan coordinator scenario passed: start-failure
+.Scan coordinator scenario passed: failed-stop
+.Scan coordinator scenario passed: rf-priority
+.Scan coordinator scenario passed: late-stop
+.Scan coordinator scenario passed: queued-start
+.Scan coordinator scenario passed: queued-stop
+.Scan coordinator scenario passed: start-timeout
+.
+----------------------------------------------------------------------
+Ran 9 tests in 23.680s
+
+OK
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.999s
+
+OK
+Real Wi-Fi/SNTP cold boot, checked AP startup/MAC naming/retries, recovery, fresh callbacks and power-save grace passed
+.
+----------------------------------------------------------------------
+Ran 1 test in 2.259s
+
+OK
+Adaptive independent NTP wakes, bounded failures/recovery, AP retention and 64-bit rollover policy passed
+.
+----------------------------------------------------------------------
+Ran 1 test in 1.211s
+
+OK
+Daily Wi-Fi bounds: exhaustive civil-minute comparisons and invalid inputs passed
+.Real daily Wi-Fi config: strict validation, durable save/load, legacy defaults and atomic failure rollback passed
+.Actual daily Wi-Fi access conversion: recurring/overnight windows, independent zones and DST passed
+.Actual Wi-Fi power decisions preserve AP/association, boot/recovery grace, NTP wakes and daily access
+.
+----------------------------------------------------------------------
+Ran 4 tests in 5.073s
+
+OK
+BLE workflow, explicit pairing, HTTP retry, protocol persistence and fail-closed RF shutdown passed
+Failed BLE initialization retains RF exclusion and recovers after controller shutdown
+Midnight/New Year windows retain target-day identity and reopen for the next daily occurrence
+.
+----------------------------------------------------------------------
+Ran 1 test in 2.423s
+
+OK
+Real sync outcome hooks: immediate first save, later success/failure RAM only, reboot counters/LED evidence, midnight and rollback passed
+Real retention toggle: durable Off, RAM-only data, no config-history leak, stale-generation suppression and preserved daily quota passed
+Saved delivery remains historical; replacement addresses/protocols cannot inherit profile completion or battery
+Real loader ignores truncated, oversized, CRC-corrupt and semantically invalid snapshots without writes
+Real history save failure (open) keeps prior snapshot, time success and one attempt/day; next day recovers
+Real history save failure (short) keeps prior snapshot, time success and one attempt/day; next day recovers
+Real history save failure (readback) keeps prior snapshot, time success and one attempt/day; next day recovers
+Real history save failure (rename) keeps prior snapshot, time success and one attempt/day; next day recovers
+.Brisbane calendar-day quota: midnight, reboot, disable/re-enable, failed attempt and clock rollback passed
+Compact 168-byte snapshot preserves counters, UTC timestamps and watch identity; every single-bit corruption rejected
+Malformed schema, epoch, quota, profile, protocol and address fields rejected; unset profiles retained
+.
+----------------------------------------------------------------------
+Ran 2 tests in 3.304s
+
+OK
+Actual gate: default Off, enabled delegation and Off suppression passed
+Early boot remains Off before saved configuration is restored
+.Actual gate: default Off, enabled delegation and Off suppression passed
+Early boot remains Off before saved configuration is restored
+..Actual gate: default Off, enabled delegation and Off suppression passed
+Early boot remains Off before saved configuration is restored
+Actual gate: default Off, enabled delegation and Off suppression passed
+Early boot remains Off before saved configuration is restored
+.
+----------------------------------------------------------------------
+Ran 4 tests in 1.458s
+
+OK
+Actual crash setting: default Off, durable On/Off, legacy defaults, unsupported core and all storage rollbacks passed
+.
+----------------------------------------------------------------------
+Ran 1 test in 2.563s
+
+OK
+Real RF-save preserves Bluetooth settings; every daily slot listens, durable edits/rollback and reboot retention passed
+.
+----------------------------------------------------------------------
+Ran 1 test in 4.270s
+
+OK
+Actual boot config: bounded file/lines, binary/truncated rejection, preserved corrupt records and legacy records passed
+.Bounded config writer: exact capacity, zero capacity, integer extrema, line count and newline injection passed
+.Actual config saves: bounded complete format, seven storage faults, exact readback, explicit retry and no recurring writes passed
+.Bounded config writer: exact capacity, zero capacity, integer extrema, line count and newline injection passed
+Actual config saves: bounded complete format, seven storage faults, exact readback, explicit retry and no recurring writes passed
+Actual boot config: bounded file/lines, binary/truncated rejection, preserved corrupt records and legacy records passed
+Actual schedule saves: allocator failure, partial JSON, invalid entries/counts, seven storage faults and empty/max lists passed
+Actual mount/recovery: mount preserves flash, confirmed fault-only AP formatting, pause/format failures and restart passed
+.Actual mount/recovery: mount preserves flash, confirmed fault-only AP formatting, pause/format failures and restart passed
+.Actual schedule saves: allocator failure, partial JSON, invalid entries/counts, seven storage faults and empty/max lists passed
+.
+----------------------------------------------------------------------
+Ran 6 tests in 8.642s
+
+OK
+Actual LED task: BT-only flashing, 24-hour UTC success, failure/off override, RF isolation and rollover passed
+.LED saved before ACK, legacy defaults, explicit Off reboot retention and all flash-failure rollbacks passed
+..
+----------------------------------------------------------------------
+Ran 3 tests in 3.109s
+
+OK
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.661s
+
+OK
+.
+----------------------------------------------------------------------
+Ran 1 test in 12.190s
+
+OK
+Actual bounded GET API checks passed: four profiles, 24 schedules, UTF-8/control quoting, build/history/battery/fault states, overflow 503 and 80,000 responses without retained host allocation growth.
+Per-profile font and power settings persist, validate inputs and roll back failed flash writes
+.Captured 12-byte and webapp 17-byte font packets preserved; read/write/readback precedes fresh TIME; font failures stay separate
+.Idle controller power saving wakes for manual/daily windows, honors Always Wait and retains RF exclusion on failures
+.
+----------------------------------------------------------------------
+Ran 3 tests in 5.018s
+
+OK
+.Captured GW-BX5600 battery mapping: 60% and 100%; strict packet validation and clamped endpoints passed
+.Battery notification channel, fragmented reply, 1.5s wait budget, cancellation and overflow guards passed
+.Real optional battery GET precedes SP/TIME; unsupported and failed reads preserve time, RF/disconnect abort, and fresh TIME follows optional work
+.Battery readings remain isolated by profile, binding and protocol; read failures retain last samples, replacement clears them, and zero is valid
+.Real sync workflow commits battery only after TIME succeeds, resets pending samples, preserves last readings on failed reads, and clears replaced bindings
+.
+----------------------------------------------------------------------
+Ran 6 tests in 5.218s
+
+OK
+Real RF handoff tests passed: silence failure, detach recovery, lost confidence, scheduled/full-time preemption
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.182s
+
+OK
+Actual RF command tests passed: late/rejected generations, silence failure, AP/intentional leases, rollover and checked resume recovery
+Actual timer tests passed: allocation failure, bounded retries, absent interrupts, two-tick recovery and monitor creation failure
+Actual progress monitor tests passed: stopped ISR, stalled RF task, bounded BLE allowance, stalled loop restart and long uptime
+.Actual progress monitor tests passed: stopped ISR, stalled RF task, bounded BLE allowance, stalled loop restart and long uptime
+.Actual RF command tests passed: late/rejected generations, silence failure, AP/intentional leases, rollover and checked resume recovery
+.Actual timer tests passed: allocation failure, bounded retries, absent interrupts, two-tick recovery and monitor creation failure
+.
+----------------------------------------------------------------------
+Ran 4 tests in 3.785s
+
+OK
+Concurrent stress: 10000 RF sessions, 11283 BLE sessions; no modeled overlap
+RadioBleArbiter tests passed
+Casio BX protocol capture and malformed-packet checks passed

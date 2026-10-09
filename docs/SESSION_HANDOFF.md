@@ -4,9 +4,11 @@ Updated on **9 October 2026**, using the user's **Australia/Brisbane** timezone.
 
 ## Read this first
 
+**Latest status:** V4.14 R2 is published at commit `a727dd64fabebbbc06a22f3d4644b5d7268c0d05`. The post-publication full suite passed 61 cases, browser checks and Node32s compile (1,427,796 bytes flash / 73,056 bytes global RAM); all four source ZIPs match their immutable tags. Diagnostics uptime is hours/minutes/seconds. The additional senior review found nine further issues, explicitly queued by the user in `docs/NEXT_VERSION.md`; see `docs/V4.14-R2-post-publication-review.md`. Do not silently apply that queue as a documentation update. Future workflow: reliability review before publication, full changelog and source published first, full suite afterward, numbered revision if failures occur. MeshCore messages are unrelated and must be ignored in this session.
+
 This is maintenance of the user's own ESP32 watch transmitter. The current request is **V4.14 build R2**: implement all recommendations from the earlier long-run reliability review, finish validation and publish source, then perform an additional full review. The user explicitly authorized these working-function changes. Preserve BT LED/daily minimal status/Wi-Fi access, battery/font behavior, project links and the approved eight-item sidebar. Future code/features require a fresh embedded reliability review **before publishing**, recorded in `AGENTS.md`. Essential settings/status remain the only normal flash records, with separately optional default-Off crash dumps.
 
-**Status at handoff: R2 reliability implementation and final release checks are in progress; use the R2 review/evidence for the final result.** Original R1 results are historical and cannot be reused as R2 counts, sizes or hashes. The implemented fixes cover storage/OOM safety, pinned NimBLE shutdown and allocation faults, BT deadlines, nonblocking network recovery, trust-driven NTP wakes, ownership-safe RF commands, timing/progress recovery, checked JSON, rollover and conservative clock confidence. No physical ESP32/watch is attached to the cloud.
+**Status at handoff: R2 is published and the complete post-publication suite passed. Nine additional senior-review findings are queued for future updates.** Original R1 results are historical and cannot be reused as R2 counts, sizes or hashes. The implemented fixes cover storage/OOM safety, pinned NimBLE shutdown and allocation faults, BT deadlines, nonblocking network recovery, trust-driven NTP wakes, ownership-safe RF commands, timing/progress recovery, checked JSON, rollover and conservative clock confidence. No physical ESP32/watch is attached to the cloud.
 
 Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.14-R2-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
 
@@ -20,7 +22,7 @@ Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.14-R2-r
 - V4.14 R2 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.14-r2.zip>.
 - Arduino sketch and helper: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.14-r2.zip>.
 - RadioCrashDumpGate library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip>.
-- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.14-r2/docs/SESSION_HANDOFF.md>.
+- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/main/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.
 - V4.10 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.10>.
 - V4.10 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.10.zip>.

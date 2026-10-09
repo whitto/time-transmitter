@@ -1,5 +1,20 @@
 # Next version updates
 
+## Queued after the V4.14 R2 senior review
+
+All nine findings below are **future work**, queued at the user's request on 9 October 2026. They are not fixed in R2. See [the full post-publication review](V4.14-R2-post-publication-review.md) for source links, reproductions, conditions and recommended validation. Complete each change's reliability review before publishing, then run the full suite after publication; failures require a new numbered revision.
+
+- [ ] **P1 — NTP reacquisition:** recover from an incorrect initial plausible time anchor using bounded consistent multi-reply/server-confirmed reacquisition, with RF/BT off until trust returns. Test the reproduced one-hour initial error and correct replies over prolonged uptime.
+- [ ] **P1 — BLE host/scan/controller recovery:** add a common bounded shutdown/progress deadline covering scanner and controller failures when no client exists. Test an unacknowledged scan-stop event and repeated deinit errors; retain RF exclusion throughout recovery.
+- [ ] **P1 — HTTP request bounds:** limit POST body bytes before allocation and enforce an absolute request deadline below the loop monitor threshold. Test slow/disrupted client transfers and retain responsive firmware supervision.
+- [ ] **P2 — Final BT clock trust:** cancel active transactions when confidence is lost and recheck immediately before sampling/sending TIME. Test holdover expiry and rejected NTP during battery/font/handshake work; unwind callbacks safely.
+- [ ] **P2 — Timer retry replenishment:** replace the lifetime-only three-attempt budget with bounded consecutive/rate-window recovery and replenish after a verified healthy period. Keep lifetime diagnostics separate and prevent rapid endless retry.
+- [ ] **P2 — Strict saved configuration:** validate every field into a complete candidate, reject permissive numeric conversions such as `630junk`, and add versioned content integrity checks with bounded legacy migration. Preserve corrupt files for explicit recovery; add no periodic flash writes.
+- [ ] **P2 — Checked Wi-Fi shutdown:** check disconnect/mode results, distinguish desired from observed power state, expose a RAM fault and recover with bounded retries if Off fails. Test connected-but-unserviced state and SDK return failures.
+- [ ] **P3 — Adaptive NTP recovery:** aggregate short-interval drift samples or conservatively update uncertainty when intervals fall below 300 seconds. Test a jitter-induced 210-second interval followed by many correct replies; retain conservative trust limits.
+- [ ] **P3 — SSID byte limit:** enforce the ESP32 station's 32-byte SSID maximum in UI/API before saving, including UTF-8 byte length. Test accepted/rejected boundaries and setup recovery.
+
+
 - [x] V4.8: Clarify the successful Bluetooth sync wording in **Watch (BLE) → Last watch result**. Show **“Time sync delivered”** after an acknowledged time write. Keep the technical explanation that the watch's resulting time/display has not been independently verified in Diagnostics. Preserve distinct failure messages and the successful sync date/time. This is a UI wording change; Bluetooth protocol and delivery checks stay unchanged.
 
 - [x] V4.13: replace routine per-sync configuration history writes with the newly approved optional compact daily snapshot. Save the first successful TIME delivery each Brisbane calendar day immediately; later successes/failures stay in RAM. Retain only UTC success timestamps/profile identity, daily quota/validation metadata and four BT diagnostic counters. No log files, battery readings, font results or error text are persisted. Off disables writes/restore and invalidates the previous snapshot; re-enabling/rebooting does not reset the saved daily quota. Keep changed watch bindings and required settings as configuration. Frozen legacy configuration fields prevent RAM history leaking into unrelated setting saves. This supersedes the earlier RAM-only proposal when the history toggle is On; Off remains RAM only. Host, sanitizer and compile checks pass; device acceptance remains outstanding.
@@ -39,4 +54,4 @@
 - [x] V4.14 R2: use nonblocking association/NTP startup, bounded Bluetooth transaction/deinit recovery, checked singleton allocations, conservative absolute drift uncertainty and pre-commit rejection of implausible NTP replies.
 - [x] V4.14 R2: record the continuing requirement in `AGENTS.md`: complete an embedded reliability review after every code change/feature and before publication, with fault regressions and evidence.
 - [ ] Physical R2 acceptance: prolonged Node32s/GW-BX5600 soak, real router/NTP outages, repeated RF/BLE/controller handoff, allocation/storage/timer faults, heap/largest-block/stack measurements and crash/history toggles. Use serial/RAM/external measurements; no flash logs or periodic maintenance reboots.
-- [ ] After completing/publishing R2, perform the user's additional full code review and report any remaining findings separately. Do not treat a compile or native soak as years of physical acceptance.
+- [x] V4.14 R2: complete the additional post-publication senior review. Nine further issues are queued above with reproduction evidence. The 61-case complete suite, browser checks, Node32s compile and all source ZIP verifications passed; physical acceptance remains outstanding.
