@@ -1,7 +1,0 @@
-{
-  "source": "https://github.com/izivkov/gshock-smart-sync-webapp/blob/5b3ff83dbae43a7a526232e5f35de98425ca7ac8/src/api/io/SettingsIO.ts",
-  "packets": {
-    "Classic": "1301010001020000200000002c00000000",
-    "Standard": "1301010001020000000000002c00000000"
-  }
-}
