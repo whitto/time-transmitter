@@ -76,12 +76,23 @@ struct SerialMock {
 } Serial;
 uint32_t tick = 0;
 uint32_t millis() { return tick; }
+uint32_t internalFreeBytes = 262144, internalLargestBytes = 131072;
+#define MALLOC_CAP_INTERNAL 1
+#define MALLOC_CAP_8BIT 2
+uint32_t heap_caps_get_free_size(int) { return internalFreeBytes; }
+uint32_t heap_caps_get_largest_free_block(int) { return internalLargestBytes; }
+uint32_t hostStackBytes = 8192;
+uint32_t uxTaskGetStackHighWaterMark(void*) { return hostStackBytes; }
+void applicationProgressCheckpoint() {}
+int controlledRecoveries = 0;
+void applicationForceSafeRestart() { ++controlledRecoveries; }
 void delay(unsigned long ms);
 struct ble_npl_event { void (*fn)(ble_npl_event*) = nullptr; };
 struct ble_npl_callout { ble_npl_event ev; bool active = false; uint32_t expiry = 0; };
 std::vector<ble_npl_callout*> hostTimers;
 bool failMonitorReset = false;
 #define BLE_NPL_OK 0
+#define NIMBLE_RADIOCLOCK_CALLOUT_INIT ble_npl_callout_init
 uint32_t ble_npl_time_ms_to_ticks32(uint32_t ms) { return ms; }
 int ble_npl_callout_init(ble_npl_callout* co, void*, void (*fn)(ble_npl_event*), void*) {
   co->ev.fn = fn; hostTimers.push_back(co); return 0;
@@ -146,6 +157,7 @@ struct NimBLERemoteService {
   const auto& getCharacteristics() { return chars; }
 } featureService;
 class NimBLEClient;
+std::function<void()> serviceDiscoveryHook;
 class NimBLEClientCallbacks {
 public:
   virtual void onConnect(NimBLEClient*) {}
@@ -179,7 +191,10 @@ struct NimBLEClient {
   }
   bool disconnect() { pendingDisconnect = true; pendingConnect = false; return true; }
   bool cancelConnect() { pendingDisconnect = true; pendingConnect = false; return true; }
-  NimBLERemoteService* getService(NimBLEUUID) { return missingService ? nullptr : &featureService; }
+  NimBLERemoteService* getService(NimBLEUUID) {
+    if (serviceDiscoveryHook) serviceDiscoveryHook();
+    return missingService || handle == BLE_HS_CONN_HANDLE_NONE ? nullptr : &featureService;
+  }
 } retainedClient;
 struct ble_gatt_error { int status; uint16_t att_handle = 0; };
 struct ble_gatt_attr {};
@@ -191,6 +206,7 @@ struct NimBLETaskData {
       : m_flags(flags), m_pBuf(buffer) {}
 };
 std::function<void()> pendingGattCallback;
+bool holdGattUntilDisconnect = false;
 struct NimBLEUtils {
   static bool taskWait(NimBLETaskData& task, uint32_t) {
     const uint32_t started = tick;
@@ -269,7 +285,7 @@ void delay(unsigned long ms) {
   if (nextDelayHook) { auto hook = std::move(nextDelayHook); nextDelayHook = {}; hook(); }
   if (!allowHostProgress) return;
   for(auto* co : hostTimers) {
-    if(co->active && tick >= co->expiry) {
+    if(co->active && static_cast<int32_t>(tick - co->expiry) >= 0) {
       co->active = false;
       ble_npl_eventq_put(nullptr,&co->ev);
     }
@@ -289,7 +305,7 @@ void delay(unsigned long ms) {
     retainedClient.pendingConnect = false;
     retainedClient.callbacks->onConnect(&retainedClient);
   }
-  if (pendingGattCallback && ((!rfDemand && !retainedClient.pendingDisconnect) || btClientQuiescent())) {
+  if (pendingGattCallback && ((!rfDemand && !holdGattUntilDisconnect && !retainedClient.pendingDisconnect) || btClientQuiescent())) {
     auto callback = std::move(pendingGattCallback); pendingGattCallback = {}; callback();
   }
 }
@@ -304,7 +320,13 @@ int main() {
   timeChar.uuid = "time";
   timeChar.attributeHandle = 3;
   // A genuine SP_REQUEST Write Without Response characteristic is accepted.
+  assert(bluetoothHostStackMinimum() == 0); // Unknown before the first host callback.
   assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
+  assert(bluetoothHostStackMinimum() == 8192);
+  hostStackBytes = 6144;
+  delay(25);
+  assert(bluetoothHostStackMinimum() == 6144);
+  hostStackBytes = 8192;
   assert(btBleBusy && !btClientQuiescent());
   assert(!retainedClient.selfDelete);
   assert(NimBLEDevice::allocations == 1);
@@ -474,13 +496,67 @@ int main() {
   disconnectGShock();
   assert(btClientQuiescent());
   failMonitorReset = false;
+  // Internal memory admission rejects an attempt before SDK allocation and
+  // does not confuse a large total heap with a fragmented internal heap.
+  assert(bluetoothMemoryAvailable(true));
+  internalLargestBytes = 4096;
+  int connectionsBeforePressure = retainedClient.connectCalls;
+  assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
+  assert(retainedClient.connectCalls == connectionsBeforePressure && !btBleBusy);
+  internalLargestBytes = 131072;
+  internalFreeBytes = 16384;
+  assert(!bluetoothMemoryAvailable() && !bluetoothMemoryAvailable(true));
+  internalFreeBytes = 262144;
+  // Total-transaction timeout interrupts a blocked ATT write on the host.
+  // The callback is cancelled and released before stack task storage expires.
+  assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
+  holdGattUntilDisconnect = true;
+  dataChar.onWrite = [] { tick = btTransactionStartedMillis.load() + BT_TRANSACTION_DEADLINE_MS - 20; };
+  assert(!writeBt(btSpData,payload,sizeof(payload),true));
+  assert(!pendingGattCallback && btClientQuiescent());
+  dataChar.onWrite = {};
+  holdGattUntilDisconnect = false;
+  disconnectGShock();
+  assert(!btTransactionActive.load());
+  // Discovery uses synchronous SDK waits too; the same independent deadline
+  // disconnects that procedure, including a millis() wrap during the wait.
+  tick = UINT32_MAX - 255;
+  serviceDiscoveryHook = [] {
+    while (retainedClient.handle != BLE_HS_CONN_HANDLE_NONE) delay(5);
+  };
+  assert(!connectGShock(BT_PROTOCOL_BX5600_MIP));
+  assert(btClientQuiescent() && !btBleBusy && !btTransactionActive.load());
+  serviceDiscoveryHook = {};
+  // Quarantine can recover from a late callback. A permanently stalled GAP
+  // teardown instead requests one bounded, RF-safe recovery after 60 seconds.
+  assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
+  allowHostProgress = false;
+  disconnectGShock();
+  assert(!serviceBtClientQuarantine() && btClientQuarantineActive);
+  tick += 59999;
+  assert(!serviceBtClientQuarantine() && controlledRecoveries == 0);
+  tick += 1;
+  assert(!serviceBtClientQuarantine() && controlledRecoveries == 1);
+  allowHostProgress = true;
+  disconnectGShock();
+  assert(btClientQuiescent() && !btClientQuarantineActive);
+  // Repeated quiescent shutdown/reinitialization keeps exactly one retained
+  // client and leaves no queued application event/callout after each cycle.
+  for (int cycle = 0; cycle < 1000; ++cycle) {
+    assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
+    assert(writeBt(btSpData,payload,sizeof(payload),true));
+    disconnectGShock();
+    releaseBtClientBarrier();
+    assert(hostTimers.empty() && hostEvents.empty());
+    assert(NimBLEDevice::allocations == 1);
+  }
   std::puts("BLE lifecycle, RF cancellation, MTU guards, ATT errors, authentication retry and SP_DATA notifications passed");
 }
 '''
 
 
 class BleLifecycleTest(unittest.TestCase):
-    def test_real_firmware_helpers(self):
+    def run_real_firmware_helpers(self, sanitized=False):
         self.assertIsNotNone(shutil.which('g++'), 'g++ is required for host lifecycle tests')
         source = FIRMWARE.read_text()
         start = source.index('static std::atomic<bool> btClientConnected')
@@ -495,9 +571,18 @@ class BleLifecycleTest(unittest.TestCase):
             unit = Path(tmp) / 'test.cpp'
             binary = Path(tmp) / 'test'
             unit.write_text(MOCKS + '\n' + lifecycle + '\n' + functions + '\n' + DRIVER)
-            subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
-                            '-I', str(FIRMWARE.parent), str(unit), '-o', str(binary)], check=True)
+            command = ['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                       '-I', str(FIRMWARE.parent), str(unit), '-o', str(binary)]
+            if sanitized:
+                command[1:1] = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie']
+            subprocess.run(command, check=True)
             subprocess.run([str(binary)], check=True)
+
+    def test_real_firmware_helpers(self):
+        self.run_real_firmware_helpers()
+
+    def test_real_firmware_helpers_sanitized(self):
+        self.run_real_firmware_helpers(sanitized=True)
 
 
 if __name__ == '__main__':

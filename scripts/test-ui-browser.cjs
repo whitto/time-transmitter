@@ -31,7 +31,7 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.14', station: -1, radio_active: false,
+    firmware_version: 'V4.14', firmware_build: 'R2', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     wifi_connected:true,ap_mode:false,wifi_ip:'10.0.1.137',
     bt_day_complete: true, bt_pairing: false,
@@ -163,11 +163,12 @@ const { chromium } = require('playwright');
         bt_connection_attempts:3,bt_acked_writes:2,bt_notifications:4,bt_response_errors:0,bt_delivery_evidence:'ATT write acknowledged; watch display unverified',
         bt_last_sync_date:status.bt_last_sync_date,bt_last_sync_status:status.bt_last_sync_status,bt_last_sync_epoch:1791491417,bt_last_outcome_successful:true,bt_history_persist:config.bt_history_persist,bt_history_saved_at:config.bt_history_saved_at,bt_history_save_status:config.bt_history_save_status,ap_mode:status.ap_mode,ap_ip:status.ap_ip
       };
+      else if (url === '/api/storage/reset') { assert.match(req.postData(),/ERASE_SAVED_SETTINGS/);data={status:'success'}; }
       else if (url === '/api/bluetooth-pair') data = { message: 'Pairing window opened' };
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.14');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.14 R2');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -645,12 +646,57 @@ const { chromium } = require('playwright');
     assert.match(await page.locator('#diagnostics').textContent(),/Full-time BT listen \(Always Wait\): Off/);
     assert.match(await page.locator('#diagnostics').textContent(),/Next JJY transmission: 2026-10-07 21:00.*Asia\/Tokyo.*JJY 60 kHz/);
     assert.match(await page.locator('#diagnostics').textContent(),/Last reset reason: Brownout/);
+    assert.match(await page.locator('#diagnostics').textContent(),/Uptime: 2h 00m 00s/);
     assert.match(await page.locator('#diagnostics').textContent(),/BT saved snapshot.*2026-10-09 06:30:17/);
     assert.match(await page.locator('#diagnostics').textContent(),/First success each Brisbane day; later updates RAM only/);
     assert.match(await page.locator('#diagnostics').textContent(),/BLE connects.*3 \/ 2 \/ 4 \/ 0/);
     assert.match(await page.locator('#diagnostics').textContent(),/Largest free heap block: 90000 bytes/);
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:'/tmp/radioclock-v49-diagnostics.png',fullPage:true});
+    // An open dashboard no longer fetches the expensive diagnostics bundle.
+    await page.evaluate(()=>showView('home'));
+    const homePollStart=requests.length;
+    for(let i=0;i<12;i++)await page.evaluate(()=>tick());
+    assert.equal(requests.length-homePollStart,12);
+    assert.ok(requests.slice(homePollStart).every(r=>r.url==='/api/status'));
+    await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:true}));
+    const hiddenPollStart=requests.length;await page.evaluate(async()=>{await tick();await updateDiagnostics()});
+    assert.equal(requests.length,hiddenPollStart,'hidden tabs make no periodic API requests');
+    await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:false}));
+    holdNextStatus=true;const statusOverlapCaptured=new Promise(resolve=>{statusHeld=resolve});
+    const overlapPollStart=requests.length;
+    await page.evaluate(()=>{window.overlapPolls=Array.from({length:20},()=>tick())});await statusOverlapCaptured;
+    assert.equal(requests.length-overlapPollStart,1,'overlapping real-browser polls share one HTTP request');
+    releaseStatus();await page.evaluate(async()=>await Promise.all(window.overlapPolls));
+    holdNextConfig=true;config.ssid='old config snapshot';const olderConfigCaptured=new Promise(resolve=>{configHeld=resolve});
+    await page.evaluate(()=>{window.olderConfigRead=loadConfig()});await olderConfigCaptured;
+    config.ssid='new config snapshot';await page.evaluate(()=>loadConfig());releaseConfig();await page.evaluate(async()=>await window.olderConfigRead);
+    assert.equal(await page.locator('#ssid').inputValue(),'new config snapshot','latest configuration read wins without requiring a write');
+    await page.evaluate(()=>showView('settings'));
+    await page.evaluate(()=>renderStorageHealth({filesystem_available:true,config_storage_fault:true,ap_mode:true}));
+    assert.equal(await page.locator('#storage-recovery-settings').isVisible(),true);
+    assert.equal(await page.locator('#storageResetButton').isVisible(),false,'failed writes do not invite erasing credentials');
+    await page.evaluate(()=>renderStorageHealth({filesystem_available:false,ap_mode:true}));
+    assert.equal(await page.locator('#storageResetButton').isVisible(),true);
+    page.once('dialog',dialog=>dialog.dismiss());const cancelledResetStart=requests.length;
+    await page.locator('#storageResetButton').click();
+    assert.equal(requests.length,cancelledResetStart,'declined destructive dialog sends no reset');
+    page.once('dialog',dialog=>{assert.match(dialog.message(),/Wi-Fi credentials.*cannot be undone/s);dialog.accept()});
+    await page.locator('#storageResetButton').click();
+    await page.waitForFunction(()=>document.getElementById('toast').textContent.includes('Reconnect to the RadioStation'));
+    assert.equal(requests.at(-1).url,'/api/storage/reset');
+    await page.evaluate(()=>renderStorageHealth({filesystem_available:true,config_storage_fault:false}));
+    assert.equal(await page.locator('#storage-recovery-settings').isVisible(),false);
+    await page.evaluate(()=>{showView('home');document.getElementById('toast').className='toast'});await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:'/tmp/radioclock-v414-r2-overview-desktop.png',fullPage:true});
+    await page.evaluate(()=>showView('settings'));await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:'/tmp/radioclock-v414-r2-settings-desktop.png',fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await page.evaluate(()=>showView('home'));await page.evaluate(()=>window.scrollTo(0,0));
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'phone layout remains within viewport');
+    await page.screenshot({path:'/tmp/radioclock-v414-r2-overview-phone.png',fullPage:true});
+    assert.deepEqual(await page.locator('.navbtn').allTextContents(), ['Overview', 'Radio', 'Watch (BLE)', 'Schedules', 'Network', 'Settings', 'Diagnostics', 'About']);
+    console.log('V4.14 R2 browser polling reliability passed: quiet Overview/hidden tabs, coalesced HTTP requests, latest config wins, fault-only explicitly confirmed storage recovery, unchanged eight-item sidebar and desktop/phone layout.');
     assert.deepEqual(pageErrors, []);
     console.log('V4.14 browser regressions passed: crash toggle opt-in/only-own-setting/persistence/pending/stale-read/rollback/unsupported-core;  daily history autosave/persistence/rollback/pending and stale reads, overnight Wi-Fi group/drafts/power override, green/red RF/AP states in dark/light, phone/sidebar screenshots; existing: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {

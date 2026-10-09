@@ -78,8 +78,8 @@ class CrashDumpConfigTest(unittest.TestCase):
         mocks = mocks.replace("if (*mode == 'w') {", "if (*mode == 'w') { if (!crashOpenOk) return {}; ")
         mocks = mocks.replace('flash[to] = flash.at(from);',
                               'if (!crashRenameOk) return false; flash[to] = flash.at(from);')
-        mocks = mocks.replace('size_t print(const String& s) { *contents += s.s; return s.length(); }',
-                              'size_t print(const String& s) { *contents += s.s; return crashShortWrite ? 0 : s.length(); }')
+        mocks = mocks.replace('contents->append(reinterpret_cast<const char*>(data), count); return count;',
+                              'contents->append(reinterpret_cast<const char*>(data), count); return crashShortWrite ? 0 : count;')
         unit = unit.replace(workflow.MOCKS, mocks, 1).replace(workflow.DRIVER, DRIVER, 1)
         with tempfile.TemporaryDirectory(prefix="radioclock-crash-config-") as tmp:
             file, binary = Path(tmp) / "test.cpp", Path(tmp) / "test"

@@ -4,28 +4,28 @@ Updated on **9 October 2026**, using the user's **Australia/Brisbane** timezone.
 
 ## Read this first
 
-This is maintenance of the user's own ESP32 watch transmitter. The latest request is V4.14: add a saved, default-Off crash-dump toggle and perform a read-only review for long-run embedded reliability. Preserve V4.13's BT LED/daily minimal status/Wi-Fi-window behavior, V4.12 battery reporting, earlier panic/font corrections, project links and approved sidebar. The user wants essential settings/status only in flash, except optional crash dumps when explicitly enabled. Review findings do not authorize changing working functions; recommendations require prior approval.
+This is maintenance of the user's own ESP32 watch transmitter. The current request is **V4.14 build R2**: implement all recommendations from the earlier long-run reliability review, finish validation and publish source, then perform an additional full review. The user explicitly authorized these working-function changes. Preserve BT LED/daily minimal status/Wi-Fi access, battery/font behavior, project links and the approved eight-item sidebar. Future code/features require a fresh embedded reliability review **before publishing**, recorded in `AGENTS.md`. Essential settings/status remain the only normal flash records, with separately optional default-Off crash dumps.
 
-**Status at handoff: V4.14 feature implementation and cloud validation are complete, prepared for source-only publication.** All 42 host cases, browser checks, Node32s compile, image and actual release-ELF panic-path verification passed. The reliability review found confirmed recovery/data-loss paths and a pinned NimBLE shutdown defect; those findings are not fixed by this release. A successful compile or host test does not establish physical device/watch behavior; no ESP32 or watch is attached to the cloud.
+**Status at handoff: R2 reliability implementation and final release checks are in progress; use the R2 review/evidence for the final result.** Original R1 results are historical and cannot be reused as R2 counts, sizes or hashes. The implemented fixes cover storage/OOM safety, pinned NimBLE shutdown and allocation faults, BT deadlines, nonblocking network recovery, trust-driven NTP wakes, ownership-safe RF commands, timing/progress recovery, checked JSON, rollover and conservative clock confidence. No physical ESP32/watch is attached to the cloud.
 
-Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.14-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
+Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.14-R2-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
 
 ## Repository and current release
 
 - Repository: <https://github.com/whitto/time-transmitter>.
 - Cloud checkout: `/workspace/time-transmitter`, branch `main`.
-- Source release: **V4.14**, tag `v4.14`; resolve its commit with `git rev-parse v4.14^{commit}`. Previous release: **V4.13**.
+- Source release: **V4.14 build R2**, new tag `v4.14-r2`; resolve its published commit with `git rev-parse v4.14-r2^{commit}`. Historical R1 tags remain unchanged.
 - Previous V4.11 release commit: `9edbdc2462b76757cabba9ca689e62689c6e93b8`.
-- V4.14 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.14>.
-- V4.14 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.14.zip>.
-- Arduino sketch and helper: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.14.zip>.
+- V4.14 R2 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.14-r2>.
+- V4.14 R2 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.14-r2.zip>.
+- Arduino sketch and helper: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.14-r2.zip>.
 - RadioCrashDumpGate library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip>.
-- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.14/docs/SESSION_HANDOFF.md>.
+- Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/v4.14-r2/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.
 - V4.10 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.10>.
 - V4.10 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.10.zip>.
 - Current active source: `firmware/RadioClock_V4_14/RadioClock_V4_14.ino`; previous version folders/reviews are retained unchanged.
-- Keep the complete 11-file sketch folder and install the separate five-file `RadioCrashDumpGate` source library from `libraries/RadioCrashDumpGate`. Its `library.properties` and `src/esp32/README.md` marker are required. The Arduino-only archive contains both folders, 16 files total. No compiled library/firmware archive is supplied. Check `git status` and actual diffs before editing; later work may have progressed.
+- Keep the complete 14-file sketch folder (eleven headers) and both source libraries: `libraries/RadioCrashDumpGate` and the patched `libraries/NimBLE-Arduino`. Keep the five crash-gate files including its linker metadata/marker. Replace plain/duplicate NimBLE 2.5.1 with **2.5.1-radioclock.1**; the firmware rejects an unpatched build. The Arduino archive includes all three complete folders and no compiled binaries. Patched-library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip>. Check `git status` and actual diffs before editing; later work may have progressed.
 - UI source: `ui/radioclock.html`; approved layout reference: `ui/v32_ui_mockup.png`.
 - The previous V4.11 ZIP was downloaded and verified against all 162 tracked release files. Repeat that verification for each published version, including the Arduino-source-only ZIP.
 
@@ -35,7 +35,9 @@ Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.14-revi
 
 Install **RadioCrashDumpGate 1.0.0** into the Arduino sketchbook's `libraries` folder, or install its library-only ZIP using **Sketch → Include Library → Add .ZIP Library**. Keep all five files including its textual `src/esp32/README.md` marker. Arduino's mixed-library metadata supplies `--wrap=esp_core_dump_write` while compiling source normally; no `.a` or `.so` is shipped. A retained `__real_` reference makes missing linker metadata fail the build. Cloud scripts install the included helper. Classic ESP32 is validated; other MCU targets require their own linker metadata and call-path proof. Recheck actual release ELF dispatch and IRAM/DRAM placement after toolchain changes.
 
-The long-run review is **read only**. It found no demonstrated growing application RAM leak, but confirmed schedule-save data loss under forced JSON allocation failure, the separate NimBLE 2.5.1 queued-host-timer shutdown defect, AP fallback without automatic station recovery, power-save NTP wakes that can miss trust deadlines, late timed-out pause ownership and timer-start failure handling. General failed config-save retries remain queued. Additional findings concern unchecked allocations, filesystem auto-format, 49.71-day boot-window/uptime rollover and missing application progress/stack monitoring. See the dedicated report for conditions, source/reproduction evidence, priorities and recommended follow-up approval. Do not silently apply those fixes as part of the crash-dump feature.
+The user approved all original review recommendations for R2. `docs/LONG_RUN_RELIABILITY_REVIEW.md` now maps findings to fixes and tests; `docs/V4.14-R2-review.md` records release validation. Required fixes are not left pending approval. Retain the earlier R1 reproductions as historical evidence rather than treating their intentionally unsafe snapshots as current passing tests. No confirmed growing application RAM leak was demonstrated, but physical soak and SDK/watch behavior remain unproven.
+
+R2 uses bounded/readback-checked saves, no recurring failed-config retries, bounded boot parsing and non-destructive filesystem recovery. A mount-fault AP provides a specifically confirmed settings erase/restart; mounted save faults only permit explicit retry. Router outages retain AP access while station retries; independent NTP wakes follow trust deadlines. RF uses cancelled command generations/pause ownership, checked timer progress and RAM-only monitoring. Unrecoverable stalls can force RF off and trigger a controlled restart; there are no periodic maintenance reboots.
 
 ## Approved V4.13 scope and behavior
 
@@ -65,7 +67,7 @@ Source evidence and build/test results are in `docs/V4.12-review.md`. Test on th
 
 The user uses a classic **Node32 / Node32s ESP32**, Arduino IDE **2.3.4**, a connected transmitter coil, **40 MHz flash**, and **No OTA (Large APP)**. They previously had **Erase All Flash Before Sketch Upload** enabled. Their exact flash-size/mode settings should be taken from the current build or confirmed if needed; do not recommend unnecessary erases.
 
-The user explicitly confirmed **Arduino-ESP32 3.3.12** and **NimBLE-Arduino 2.5.1**. The cloud toolchain also pins **ArduinoJson 6.21.5** and Arduino CLI **1.3.1**. The target is 4 MB flash, with the supplied sketch-local `partitions.csv` defining a 3 MB application partition. The default 1.25 MB partition is too small.
+The user confirmed **Arduino-ESP32 3.3.12** and originally **NimBLE-Arduino 2.5.1**. R2 requires the included patched **2.5.1-radioclock.1** source fork, with the upstream host-timer fix and checked initialization allocations. The cloud toolchain also pins **ArduinoJson 6.21.5** and Arduino CLI **1.3.1**. The target is 4 MB flash, with the supplied sketch-local `partitions.csv` defining a 3 MB application partition. The default 1.25 MB partition is too small.
 
 The watch is a **Casio GW-BX5600, module 3578**, using the GW-BX5600 MIP protocol. Manual time correction is triggered by pressing **D once from Timekeeping Mode**; pairing/full connection uses a long press of **C**.
 
@@ -132,7 +134,7 @@ It also sets **`setScanResponseTimeout(0)`** to avoid the affected independent p
 
 Temporary native investigation fixtures are `/workspace/panic-diagnostics/reproduce_scan_restart.py` with `scan_restart_asan.log`, and `/workspace/panic-diagnostics/reproduce_scan_null_head.py` with `scan_null_head_asan.log`. Their success means they reproduced the expected failures in the **old baseline**; it is not a passing result for the corrected firmware. The null-head reproduction matches the relevant `l32i` read from a null register plus offset 12 in the latest exception, while the ELF mismatch still limits definitive decoding.
 
-There is a **separate upstream NimBLE 2.5.1 host-timer deinit issue**: <https://github.com/h2zero/NimBLE-Arduino/issues/1184>. The reported upstream correction is not part of the pinned 2.5.1 release or this project fix. Do not claim the scan correction applies that dependency fix or proves every deinit/reinit failure solved. Check the current upstream status before deciding whether it needs a separate future dependency update.
+The **separate upstream NimBLE host-timer deinit issue** (<https://github.com/h2zero/NimBLE-Arduino/issues/1184>) was absent from the ordinary 2.5.1 release and the V4.11 scan correction. R2 now includes its upstream correction in the verified 2.5.1-radioclock.1 source fork, separately from the scan coordinator. This establishes the implemented dependency correction and regressions, not definitive attribution of every historical panic or physical shutdown/restart acceptance.
 
 ## Font correction included in this version
 
@@ -158,22 +160,19 @@ Reference implementations and real captures already reviewed:
 
 Readback agreement is stronger than a write acknowledgement, but the physical watch display still needs checking. A manual time-sync session may impose additional settings permissions; do not claim that moved ordering alone proves the device accepted a font change.
 
-## Flash policy and remaining queued change
+## Flash policy and completed retry correction
 
-The user wants **no logs written to flash** and only required configuration plus the newly approved minimal daily BT status persisted. Their main concern is writes while the ESP sits running, rather than explicit settings changes. V4.13's compact daily snapshot supersedes the earlier RAM-only proposal when its toggle is On; Off remains RAM only.
+The user wants **no logs written to flash**. Only required changed configuration/schedules and the optional minimal first-success-per-Brisbane-day BT snapshot are normally persisted. Later BT outcomes, battery/font results, faults, heartbeats and headroom remain RAM/serial. Enabled crash dumps are a separate explicit exception with no daily quota.
 
-The earlier queue contained two changes:
+The earlier per-sync history/config writes were replaced in V4.13. R2 completes the queued failed-config retry correction: retain the previous saved file, latch a RAM fault, stop background writes and retry only following an explicit successful save. Config/schedule serialization and readback failures cannot acknowledge durability.
 
-1. Routine per-sync history/config writes: addressed in V4.13 by the approved daily snapshot policy and frozen legacy settings fields, preserving required binding saves.
-2. Remove recurring background retries of failed configuration saves: **still queued**, outside this release. Retry only after an explicit user save/retry, retain the previously saved configuration on failure, and acknowledge success only after a durable write.
+LittleFS mounts with automatic formatting disabled. Mount failures keep RF off and setup AP accessible; destructive reset requires the exact explicit confirmation and an acknowledged RF pause through the mount-fault AP. Corrupt boot config is bounded and preserved with safe defaults/AP; a mounted filesystem is not eligible for automatic/destructive fault reset. Normal uploads need not erase flash.
 
-Do not silently include the remaining general config-retry change in unrelated updates. The historical V4.10 log's `Config saved atomically` three seconds after sync was evidence of its deferred config save, not a serial-log file being written. Serial logs continue to be serial-only.
-
-V4.13 omitted the optional 64 KB SDK core-dump partition, so its **“No core dump partition found!”** message was expected. V4.14 restores that partition and uses RadioCrashDumpGate to block its writer unless explicitly enabled. App/LittleFS addresses and sizes remain unchanged, and the SDK build flag itself is unchanged. Do not claim the V4.14 table is byte-identical to V4.13. Serial panic/backtrace output remains available; normal uploads do not require erasing saved settings.
+The optional 64 KB core-dump partition restored in R1 remains; app/LittleFS addresses and sizes are unchanged. RadioCrashDumpGate starts Off and permits SDK writing only when the saved toggle enables it. Disabling retains old dumps, and serial panic/backtrace output remains available.
 
 ## Build and verification workflow
 
-Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all eight active sketch companion headers and `partitions.csv` beside the `.ino` file, and install the source-only RadioCrashDumpGate library. Cloud compile scripts install it automatically.
+Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all eleven active sketch companion headers and `partitions.csv` beside the `.ino`, and install the included RadioCrashDumpGate and patched NimBLE source libraries. Cloud compile scripts install it automatically.
 
 ```bash
 cd /workspace/time-transmitter
@@ -186,13 +185,15 @@ node scripts/test-ui-browser.cjs
 RADIOCLOCK_FQBN='esp32:esp32:node32s:PartitionScheme=no_ota,FlashFreq=40' bash scripts/compile.sh
 ```
 
-Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_14`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. Keep existing scan/history/Wi-Fi-window regressions and V4.14's `tests/test_crash_dump_gate.py` in the normal runner. Reliability reproduction sources are retained under `docs/build-evidence/v4.14`; they demonstrate existing failure paths, not fixed behavior.
+Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_14`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. Keep existing scan/history/Wi-Fi-window regressions and V4.14's `tests/test_crash_dump_gate.py` in the normal runner. R1 reproduction sources under `docs/build-evidence/v4.14` preserve the old failures. Current fault regressions live in `tests/`; final R2 evidence belongs under `docs/build-evidence/v4.14-r2`. Run the reliability review before publication and the additionally requested full review afterward.
 
 Before release, retain test/compiler/image evidence, record hashes of tested source, review the scope against the previous release, and inspect the actual rendered page against the approved sidebar mockup. The new version must be consistent in the sketch path, firmware label, UI, scripts and README.
 
-## Cloud validation completed
+## Cloud validation
 
-V4.14: **42 Python host cases**, UI handlers/browser checks, native BX packet checks and existing RF/BLE stress passed. Gate cases cover Off/On/unsupported dispatch, sanitizer checks and missing-linker rejection; the actual config test covers legacy Off/save/reboot/both directions under three storage failures. Node32s compile passed at **1,429,192 / 2,097,152 bytes (68%)** program storage and **62,536 / 327,680 bytes (19%)** global RAM. The sketch-local table retains the existing 3 MB app and 896 KB filesystem addresses/sizes with the restored 64 KB core-dump slot. Settings desktop/phone renderings were inspected against the mockup; the new card defaults Off and all eight sidebar items remain.
+R2 final suite counts, compile sizes, image/ELF proof, screenshots and independent review are recorded in `docs/V4.14-R2-review.md` and `docs/build-evidence/v4.14-r2/` before publication. Six storage reliability cases include actual saves/boot faults and sanitizers; radio, network, pinned-library, JSON and lifecycle cases cover the other fixes. Run the full final suite after all shared edits; do not substitute these component checks for the release result.
+
+Historical V4.14 R1: **42 Python host cases**, UI handlers/browser checks, native BX packet checks and existing RF/BLE stress passed. Gate cases cover Off/On/unsupported dispatch, sanitizer checks and missing-linker rejection; the actual config test covers legacy Off/save/reboot/both directions under three storage failures. Node32s compile passed at **1,429,192 / 2,097,152 bytes (68%)** program storage and **62,536 / 327,680 bytes (19%)** global RAM. The sketch-local table retains the existing 3 MB app and 896 KB filesystem addresses/sizes with the restored 64 KB core-dump slot. Settings desktop/phone renderings were inspected against the mockup; the new card defaults Off and all eight sidebar items remain.
 
 Actual main-ELF verification passed: SDK panic dispatch enters the IRAM wrapper/literal pool, reads the aligned DRAM word inline, returns with Off and calls only the real SDK writer with On. `scripts/validate-crash-gate-elf.py` is a mandatory post-compile check. Retained ELF SHA256: `54b81b3d961e538b588bb5a67e948731369359704b9a2259311e58ca3f9a1fa3`. Image checksum/hash are valid. Scope audit found 23 working functions and all eight companion headers byte-identical to V4.13. Evidence is retained under `docs/build-evidence/v4.14`; published archive comparison remains part of the release procedure.
 
@@ -230,10 +231,10 @@ No physical ESP32 or Casio watch is attached to the cloud. Ask the user for resu
 
 ## Release and communication requirements
 
-- User authorization includes fixing both issues and pushing the next release. No extra generic approval step is needed; necessary device evidence is distinct from authorization.
-- Bump the version for each new released change; this source release is **V4.14**. Preserve original author notices, credits and historical version folders.
+- User authorization includes all suggested reliability corrections and pushing the R2 source release. No extra generic approval step is needed; necessary device evidence is distinct from authorization.
+- Bump the version for each new released change; this source release is **V4.14 build R2** with new immutable R2 tags. Preserve original author notices, credits and historical version folders.
 - Publish **source only**; the user did not request compiled binaries.
 - Provide change/fix descriptions and a **direct GitHub tag ZIP link after every release**. Download that ZIP and verify it matches the tested source before reporting success.
-- Preserve V4.12's verified source and do not claim a successful physical device test before the user reports one.
+- Perform a fresh reliability review after every code/feature change and before publication; complete the separately requested additional full review after finishing R2. Preserve V4.12's verified source and do not claim a successful physical device test before the user reports one.
 - The user has been frustrated by unrelated cybersecurity warning messages. Those UI/account messages cannot be controlled by this repository; continue ordinary firmware maintenance and report the concrete outcome without claiming to fix the chat platform.
 

@@ -65,6 +65,9 @@ int sampleTime(struct timeval *tv,void*) {
 void gshockNotifyCallback(NimBLERemoteCharacteristic*,uint8_t*,size_t,bool) {}
 bool readBluetoothWatchBattery() { return false; } // Battery has its own transport/capture tests.
 bool bleOperationCancelled() { return cancelled; }
+uint32_t tick = 0;
+uint32_t millis() { return tick; }
+static bool btTransactionCancelled();
 void prepareBtResponse(uint8_t header) {
   assert(header==0x13); reply.clear(); btResponseLength=0; btResponseOverflow=false;
 }
@@ -75,7 +78,7 @@ size_t copyBt(uint8_t *out,size_t capacity) {
 }
 bool writeBt(NimBLERemoteCharacteristic *c,const uint8_t *data,size_t size,bool response) {
   assert(response);
-  if(cancelled || !btClientConnected || !btClientPreemptionEnabled)return false;
+  if(btTransactionCancelled() || !btClientConnected || !btClientPreemptionEnabled)return false;
   if(c==&requestChar) {
     assert(size==1 && data[0]==0x13); ++requests; order.push_back('R');
     reply=hardware; ++elapsed;
@@ -200,6 +203,12 @@ int main() {
   reset(); btFontMode[0]=1; disconnectDuringDiscovery=true;
   assert(!performGShockBX5600Sync() && timeWrites==0 && requests==0 && fontWrites==0);
   assert(btFontLastStatus.indexOf("disconnected")>=0);
+  reset(); btFontMode[0]=1;
+  btTransactionStartedMillis.store(UINT32_MAX - 100);
+  btTransactionActive.store(true);
+  tick = static_cast<uint32_t>(UINT32_MAX - 100 + BT_TRANSACTION_DEADLINE_MS);
+  assert(!performGShockBX5600Sync() && timeWrites==0 && fontWrites==0 && requests==0);
+  btTransactionActive.store(false);
   std::puts("Captured 12-byte and webapp 17-byte font packets preserved; read/write/readback precedes fresh TIME; font failures stay separate");
 }
 '''
@@ -289,7 +298,8 @@ class WatchOptionsTest(unittest.TestCase):
             captures.append('const std::vector<uint8_t> '+name+'={'+','.join(map(str,data))+'};')
         string_mock=workflow.MOCKS.split('struct SerialMock')[0]
         functions='\n'.join(workflow.extract_function(source,n) for n in ['requestBluetoothBasicSettings','applyBluetoothWatchFont','performGShockBX5600Sync'])
-        self.run_cpp(string_mock+'\n#include <sys/time.h>\n'+'\n'.join(captures)+FONT_MOCKS+functions+driver)
+        self.run_cpp(string_mock+'\n#include <sys/time.h>\n'+'\n'.join(captures)+FONT_MOCKS+
+                     workflow.transaction_deadline_source(source)+functions+driver)
 
     def test_power_controller_windows_and_failures(self):
         source=workflow.BluetoothWorkflowTest().unit_source(FIRMWARE.read_text())

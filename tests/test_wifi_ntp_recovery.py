@@ -101,9 +101,11 @@ struct ServerMock {
   void begin() { ++starts; }
   void post(const char* path) { code=0; routes.at(path)(); assert(code); }
 } server;
+bool filesystemAvailable=true;
 bool webServerStarted=true;
 void initWebServer() { server.begin(); webServerStarted=true; }
 bool ap_mode=true, wifiConnectionPending=false, wifiRecoveryWindowActive=false;
+bool wifiConnectionAccessGrace=true;
 bool apStartPending=false;
 uint32_t apStartAttemptMillis=0;
 bool ntpResumePending=false;
@@ -111,18 +113,40 @@ bool wifiRadioEnabled=true, scheduleWantsWifi=false, accessWantsWifi=false;
 uint32_t wifiRecoveryStarted=0, wifi_connect_start=0, bootMillis=0;
 uint32_t tick=100;
 uint32_t millis() { return tick; }
+uint64_t monoOffsetMs=0;
+int64_t esp_timer_get_time() { return (int64_t)((monoOffsetMs+tick)*1000ULL); }
+bool wifiBootAccessComplete=false;
+uint64_t wifiStaRetryAtMs=0, wifiClockWakeStartedMs=0, wifiClockRetryAtMs=0;
+uint64_t wifiNtpConfigureRetryAtMs=0;
+uint32_t wifiNtpConfigureRetryDelayMs=5000;
+uint32_t wifiStaRetryDelayMs=30000, wifiClockRetryDelayMs=30000, wifiClockWakeSyncCount=0;
+bool wifiClockWakeActive=false;
+constexpr uint32_t WIFI_RETRY_MAX_MS=900000, WIFI_CLOCK_WAKE_TIMEOUT_MS=120000;
+constexpr uint32_t WIFI_CLOCK_WAKE_LEAD_SEC=60;
+uint32_t clockMockAge=0;
+uint32_t clockAgeSeconds() { return clockMockAge; }
+bool clockNtpRejected=false;
 char ssid[64]="Cloud", passwd[64]="not-a-secret";
 String timezone_name="Australia/Brisbane";
 int wifiPowerMode=WIFI_POWER_ALWAYS_ON;
-std::atomic<bool> radioPaused{true};
+std::atomic<bool> radioPaused{true}, radioApPauseOwned{false};
 void* radioTaskHandle=reinterpret_cast<void*>(1);
 bool pauseOk=true, resumeOk=true;
 int pauses=0, resumes=0, refreshes=0;
 bool radioSetPaused(bool value) {
   if (value) { ++pauses; if (!pauseOk) return false; }
   else { ++resumes; if (!resumeOk) return false; }
-  radioPaused=value; return true;
+  radioPaused=value || radioApPauseOwned.load(); return true;
 }
+struct RadioPauseLease { bool acquired=false; bool wasPaused=false; };
+bool radioAcquirePause(RadioPauseLease &lease) {
+  lease.wasPaused=radioPaused; lease.acquired=radioSetPaused(true); return lease.acquired;
+}
+bool radioReleasePause(RadioPauseLease &lease) {
+  lease.acquired=false; return lease.wasPaused || radioSetPaused(false);
+}
+constexpr int RADIO_FAULT_RESUME_TIMEOUT=1;
+void latchRadioFault(int) { radioPaused=true; }
 void radioRequestRefresh() { ++refreshes; }
 String posixTzFor(const String& name) { assert(name=="Australia/Brisbane"); return "AEST-10"; }
 bool shouldWifiBeOnForSchedule() { return scheduleWantsWifi; }
@@ -137,7 +161,7 @@ uint32_t delayedReplyTick=0;
 uint32_t intervalMs=0;
 constexpr int SNTP_SYNC_MODE_IMMED=1;
 void (*ntpCallback)(struct timeval*)=nullptr;
-void onNtpSync(struct timeval*) { ++clockNtpSyncCount; ntpsync=1; }
+void onNtpSync(struct timeval*) { ++clockNtpSyncCount; ntpsync=1; clockMockAge=0; }
 void sntp_set_time_sync_notification_cb(void (*cb)(struct timeval*)) { ntpCallback=cb; ++callbackSets; }
 void sntp_set_sync_mode(int mode) { assert(mode==SNTP_SYNC_MODE_IMMED); }
 void sntp_set_sync_interval(uint32_t ms) { intervalMs=ms; }
@@ -166,6 +190,12 @@ void serviceAPStartup();
 bool stopAPMode();
 void reset() {
   Serial.log.clear(); WiFi=WiFiMock{}; networkInitialized=true;
+  filesystemAvailable=true; wifiBootAccessComplete=false; radioApPauseOwned=false;
+  wifiConnectionAccessGrace=true;
+  wifiStaRetryAtMs=wifiClockRetryAtMs=wifiClockWakeStartedMs=wifiNtpConfigureRetryAtMs=0;
+  wifiStaRetryDelayMs=wifiClockRetryDelayMs=30000;wifiClockWakeSyncCount=0;
+  wifiNtpConfigureRetryDelayMs=5000;
+  wifiClockWakeActive=false;clockMockAge=0;clockNtpRejected=false;monoOffsetMs=0;
   server.stops=server.starts=0; webServerStarted=true;
   ap_mode=true;wifiConnectionPending=false;wifiRecoveryWindowActive=false;ntpResumePending=false;
   apStartPending=false;apStartAttemptMillis=0;
@@ -328,23 +358,25 @@ int main() {
   // If association finishes after a bounded boot/wake attempt, checking the
   // connection initializes the stopped SNTP client, exactly once.
   reset();ap_mode=false;radioPaused=false;WiFi.modeValue=WIFI_STA;
-  ntpstart();assert(!ntpEnabled && ntpsync==0 && WiFi.begins==1);
+  uint32_t beforeStart=tick;ntpstart();
+  assert(tick==beforeStart && !ntpEnabled && ntpsync==0 && WiFi.begins==1);
   WiFi.connection=WL_CONNECTED;checkWiFiConnection();
   assert(ntpEnabled && configs==1 && !radioPaused && ntpsync==0);
   checkWiFiConnection();assert(configs==1);
 
-  // A plausible old clock never impersonates a new server reply. Immediate
-  // and delayed callbacks both produce confirmation; getLocalTime isn't used.
+  // Starting the asynchronous operation never blocks loopTask or claims
+  // confirmation. Immediate/delayed SDK callbacks remain the only proof.
   reset();ap_mode=false;WiFi.connection=WL_CONNECTED;radioPaused=false;
-  clockNtpSyncCount=7;ntpsync=1;ntpstart();
-  assert(ntpsync==0 && clockNtpSyncCount==7 && localTimeReads==0);
-  assert(Serial.log.find("confirmed server reply)")==std::string::npos);
-  assert(Serial.log.find("reply pending")!=std::string::npos);
+  clockNtpSyncCount=7;ntpsync=1;beforeStart=tick;ntpstart();
+  assert(tick==beforeStart && !ntpEnabled && ntpsync==0 && clockNtpSyncCount==7);
+  checkWiFiConnection();assert(ntpEnabled && ntpsync==0 && localTimeReads==0);
   reset();ap_mode=false;WiFi.connection=WL_CONNECTED;radioPaused=false;
-  immediateReply=true;ntpstart();assert(ntpsync==1 && clockNtpSyncCount==1);
-  assert(Serial.log.find("confirmed server reply)")!=std::string::npos);
+  immediateReply=true;beforeStart=tick;ntpstart();checkWiFiConnection();
+  assert(tick==beforeStart && ntpsync==1 && clockNtpSyncCount==1);
   reset();ap_mode=false;WiFi.connection=WL_CONNECTED;radioPaused=false;
-  delayedReplyTick=tick+3000;ntpstart();assert(ntpsync==1 && clockNtpSyncCount==1);
+  delayedReplyTick=tick+3000;beforeStart=tick;ntpstart();checkWiFiConnection();
+  assert(tick==beforeStart && clockNtpSyncCount==0);delay(3000);
+  assert(ntpsync==1 && clockNtpSyncCount==1);
 
   // A helper call preserves an existing AP/maintenance pause, with no RF
   // resume on a failed acknowledgement or NTP initialization.
@@ -353,8 +385,8 @@ int main() {
   reset();WiFi.connection=WL_CONNECTED;pauseOk=false;
   assert(!configureNtpClient() && configs==0 && radioPaused && resumes==0);
   reset();ap_mode=false;radioPaused=false;WiFi.connection=WL_CONNECTED;pauseOk=false;
-  assert(!configureNtpClient() && ntpResumePending && !radioPaused);
-  radioPaused=true;pauseOk=true; // The queued pause acknowledgement arrived late.
+  assert(!configureNtpClient() && !ntpResumePending && !radioPaused);
+  pauseOk=true; // Failed acquisitions are cancelled rather than arriving late.
   assert(configureNtpClient() && !radioPaused && !ntpResumePending);
   reset();WiFi.connection=WL_CONNECTED;configOk=false;
   assert(!configureNtpClient() && configs==1 && !ntpEnabled && radioPaused);
@@ -362,8 +394,8 @@ int main() {
   // disappear. The STA web server remains usable during NTP/RF errors.
   reset();beginWifiCredentialConnection();WiFi.connection=WL_CONNECTED;
   resumeOk=false;immediateReply=true;checkWiFiConnection();
-  assert(wifiConnectionPending && webServerStarted && ntpResumePending && ntpsync==1);
-  resumeOk=true;checkWiFiConnection();
+  assert(!wifiConnectionPending && webServerStarted && ntpResumePending && ntpsync==0);
+  resumeOk=true;tick+=5000;checkWiFiConnection();
   assert(!wifiConnectionPending && !ntpResumePending && !radioPaused && ntpsync==1);
 
   // Provisioning after the boot grace gets a fresh finite Wi-Fi on-window,
@@ -389,6 +421,25 @@ int main() {
   ntpEnabled=false;configOk=false;server.post("/api/ntp-sync");
   assert(server.code==503 && configs==2 && radioPaused);
 
+  // Router absence beyond the timeout retains setup access, then retries
+  // with bounded exponential backoff. Recovery requires no user interaction.
+  reset();ap_mode=false;radioPaused=false;WiFi.modeValue=WIFI_STA;
+  ntpstart();tick+=WIFI_CONNECT_TIMEOUT;checkWiFiConnection();
+  assert(ap_mode && webServerStarted && !wifiConnectionPending);
+  const uint64_t firstRetry=wifiStaRetryAtMs;
+  calls=WiFi.begins;tick+=29999;checkWiFiConnection();assert(WiFi.begins==calls);
+  ++tick;checkWiFiConnection();assert(WiFi.begins==calls+1 && WiFi.modeValue==WIFI_AP_STA);
+  assert(webServerStarted && ap_mode && wifiConnectionPending);
+  tick+=WIFI_CONNECT_TIMEOUT;checkWiFiConnection();assert(wifiStaRetryDelayMs==120000);
+  assert(wifiStaRetryAtMs>firstRetry);
+  tick+=60000;checkWiFiConnection();WiFi.connection=WL_CONNECTED;immediateReply=true;
+  checkWiFiConnection();assert(!ap_mode && !wifiConnectionPending && ntpsync==1 && !radioPaused);
+  assert(wifiStaRetryAtMs==0 && wifiStaRetryDelayMs==30000);
+  // A filesystem fault never auto-formats/reconnects and remains reachable.
+  reset();filesystemAvailable=false;ap_mode=false;checkWiFiConnection();
+  assert(ap_mode && webServerStarted && WiFi.begins==0);
+  tick+=900000;checkWiFiConnection();assert(WiFi.begins==0);
+
   // millis() and saved timestamps are 32-bit on ESP32. The retry deadline
   // remains correct across rollover after roughly 49.7 days of uptime.
   reset();tick=UINT32_MAX-1999;WiFi.apConfigOk=false;startAPMode();
@@ -410,7 +461,7 @@ class WifiNtpRecoveryTest(unittest.TestCase):
         prefix = workflow.MOCKS.split('struct SerialMock {', 1)[0]
         names = ['flushNtpLogs', 'configureNtpClient', 'ntpstart', 'ntpstop', 'startAPMode', 'serviceAPStartup',
                  'stopAPMode', 'beginWifiCredentialConnection', 'checkWiFiConnection',
-                 'updateWifiPowerManagement']
+                 'wifiClockSyncWindowOpen', 'updateWifiPowerManagement']
         functions = '\n\n'.join(workflow.extract_function(source.replace('void\nntpstop(', 'void ntpstop('), name) for name in names)
         route = workflow.extract_route(source, '/api/ntp-sync')
         unit = prefix + MOCKS + functions + '\nvoid registerRoutes() {\n' + route + '\n}\n' + CASES

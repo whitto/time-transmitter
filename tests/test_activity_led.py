@@ -256,8 +256,8 @@ class ActivityLedTest(unittest.TestCase):
         mocks = mocks.replace("if (*mode == 'w') {", "if (*mode == 'w') { if (!mockOpenOk) return {}; ")
         mocks = mocks.replace('flash[to] = flash.at(from);', 'if (!mockRenameOk) return false; flash[to] = flash.at(from);')
         mocks = mocks.replace('struct File {', 'extern bool mockShortWrite;\nstruct File {')
-        mocks = mocks.replace('size_t print(const String& s) { *contents += s.s; return s.length(); }',
-                              'size_t print(const String& s) { *contents += s.s; return mockShortWrite ? 0 : s.length(); }')
+        mocks = mocks.replace('contents->append(reinterpret_cast<const char*>(data), count); return count;',
+                              'contents->append(reinterpret_cast<const char*>(data), count); return mockShortWrite ? 0 : count;')
         unit_source = unit_source.replace(workflow.MOCKS, mocks, 1).replace(workflow.DRIVER, PERSISTENCE_DRIVER, 1)
         self.compile_and_run(unit_source)
 

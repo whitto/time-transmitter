@@ -118,6 +118,7 @@ bool cancelled = false;
 uint32_t tick = 0, elapsed = 0;
 uint32_t millis() { return tick; }
 bool bleOperationCancelled() { return cancelled; }
+static bool btTransactionCancelled();
 struct ScheduledAction { uint32_t after; std::function<void()> fn; };
 std::vector<ScheduledAction> scheduled;
 void delay(uint32_t ms) {
@@ -196,6 +197,14 @@ int main() {
   reset(UINT32_MAX - 100); prepareBtResponse(0x28);
   gshockNotifyCallback(&allFeatures, packet, sizeof(packet), true);
   assert(waitBt(sizeof(packet), 1500) && elapsed == 300); // millis wrap remains bounded.
+  reset(UINT32_MAX - 100);
+  btTransactionStartedMillis.store(tick);
+  btTransactionActive.store(true);
+  tick += BT_TRANSACTION_DEADLINE_MS - 50;
+  prepareBtResponse(0x28);
+  gshockNotifyCallback(&allFeatures, packet, sizeof(packet), true);
+  assert(!waitBt(sizeof(packet), 1500) && elapsed == 50 && !btResponseActive);
+  btTransactionActive.store(false);
   std::puts("Battery notification channel, fragmented reply, 1.5s wait budget, cancellation and overflow guards passed");
 }
 '''
@@ -249,7 +258,7 @@ size_t strlcpy(char* out, const char* input, size_t capacity) {
 }
 static void gshockNotifyCallback(NimBLERemoteCharacteristic*, uint8_t*, size_t, bool);
 bool writeBt(NimBLERemoteCharacteristic* c, const uint8_t* data, size_t size, bool response) {
-  if (cancelled || !btClientConnected || !btClientPreemptionEnabled) return false;
+  if (btTransactionCancelled() || !btClientConnected || !btClientPreemptionEnabled) return false;
   if (c == &batteryRequest) {
     assert(size == 1 && data[0] == 0x28 && !response);
     assert(btResponseActive && btExpectedHeader == 0x28);
@@ -495,7 +504,7 @@ class WatchBatteryTest(unittest.TestCase):
         # unsigned long is 32-bit on ESP32 but 64-bit on this host. Keep the
         # target's timestamp width for the millis-wrap check.
         functions = functions.replace('unsigned long last =', 'uint32_t last =')
-        self.run_cpp(NOTIFICATION_MOCKS + functions + NOTIFICATION_DRIVER)
+        self.run_cpp(NOTIFICATION_MOCKS + workflow.transaction_deadline_source(source) + functions + NOTIFICATION_DRIVER)
 
     def transport_source(self, driver):
         source = FIRMWARE.read_text()
@@ -522,7 +531,7 @@ class WatchBatteryTest(unittest.TestCase):
         functions = functions.replace('static bool readBluetoothWatchBattery(',
                                       copy_wrapper + 'static bool readBluetoothWatchBattery(', 1)
         return '\n'.join([NOTIFICATION_MOCKS, string_mock, '\n'.join(captures),
-                          TRANSPORT_MOCKS, functions, driver])
+                          TRANSPORT_MOCKS, workflow.transaction_deadline_source(source), functions, driver])
 
     def test_optional_read_failures_and_fresh_time_session(self):
         self.run_cpp(self.transport_source(TRANSPORT_DRIVER))

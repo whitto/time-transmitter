@@ -17,7 +17,7 @@ FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
 
 
 def function(source, name):
-    match = re.search(r'^(?:static )?(?:void|bool|int|double|uint32_t|String|const char \*)\s*' +
+    match = re.search(r'^(?:extern "C" )?(?:static )?(?:void|bool|int|double|uint32_t|String|const char \*)\s*' +
                       name + r'\([^;]*?\)\s*\{', source, re.M)
     if not match:
         raise AssertionError(f'Function {name} missing')
@@ -69,8 +69,16 @@ using portMUX_TYPE = int;
 std::atomic<int> ntpsync{1};
 uint64_t mockMonoUs = 1000000;
 int64_t esp_timer_get_time() { return mockMonoUs; }
+int64_t restoredEpochUs = 0;
+int fakeSetTime(const struct timeval* tv, const void*) {
+  restoredEpochUs = (int64_t)tv->tv_sec*1000000 + tv->tv_usec; return 0;
+}
+#define settimeofday fakeSetTime
 uint32_t sdkIntervalMs = 3600000, sdkNextTimeoutMs = 0;
 unsigned ntpRestarts = 0;
+constexpr int SNTP_SYNC_STATUS_RESET=0,SNTP_SYNC_STATUS_COMPLETED=1;
+int sdkSyncStatus=SNTP_SYNC_STATUS_RESET;
+void sntp_set_sync_status(int status) { sdkSyncStatus=status; }
 void sntp_set_sync_interval(uint32_t ms) { sdkIntervalMs = ms < 15000 ? 15000 : ms; }
 void sntp_restart() { ++ntpRestarts; sdkNextTimeoutMs = 2000; }
 String btTimezoneName = "Australia/Sydney", timezone_name = "UTC";
@@ -153,7 +161,8 @@ void resetClock() {
   ntpLastMonoUs = 0; ntpLastEpochUs = 0;
   ntpDriftPpm = 0; ntpDriftAbsSecPerHour = 0;
   clockNtpEverSynced = false; clockNtpSyncCount = 0;
-  clockDriftSampleAvailable = false;
+  clockDriftSampleAvailable = false; clockDriftBoundPpm = CLOCK_INITIAL_PPM;
+  clockNtpRejected = false; clockNtpRejectedCount = 0; restoredEpochUs = 0;
   ntpIntervalSec = NTP_INITIAL_INTERVAL_SEC;
   mockMonoUs = 1000000; sdkIntervalMs = 3600000;
   sdkNextTimeoutMs = 0; ntpRestarts = 0;
@@ -162,7 +171,7 @@ void receiveReply(int64_t epochUs) {
   struct timeval tv{(time_t)(epochUs/1000000), (suseconds_t)(epochUs%1000000)};
   // The pinned lwIP sntp_recv calls sntp_process / the notification
   // before it reads SNTP_UPDATE_DELAY to arm its next request.
-  onNtpSync(&tv);
+  sntp_sync_time(&tv);
   sdkNextTimeoutMs = sdkIntervalMs;
 }
 void testNtpShortReplies() {
@@ -201,9 +210,11 @@ void testAdaptiveTrust() {
     mockMonoUs = ntpLastMonoUs + (interval+30ULL)*1000000;
     // Margin leaves time for a response, even at high measured drift.
     assert(clockEstimatedError() < 0.90 && clockTrusted());
-    if (fabs(ppm) == 50) assert(interval >= 12599 && interval <= 12600);
-    if (ppm == 0 || ppm == 1) assert(interval == 19440);
-    if (ppm == 1000) assert(interval >= 629 && interval <= 630);
+    // Both endpoint uncertainty and absolute drift contribute to the bound.
+    const double expectedBound = fabs(ppm) + 0.4 * 1000000.0 / 3600.0;
+    assert(fabs(clockDriftBoundPpm-expectedBound) < 1e-7);
+    const uint32_t expectedInterval=(uint32_t)(0.63*1000000.0/expectedBound);
+    assert(interval == expectedInterval);
     mockMonoUs = ntpLastMonoUs + (CLOCK_MAX_HOLDOVER_SEC+1ULL)*1000000;
     assert(!clockTrusted());
   }
@@ -213,6 +224,33 @@ void testAdaptiveTrust() {
   mockMonoUs += 3600ULL*1000000;
   receiveReply(ntpLastEpochUs + 3600LL*1000000 + 360000);
   assert(fabs(ntpDriftPpm - 35.0) < 1e-7);
+}
+void testDriftReversalsAndRejectedCorrections() {
+  measureDrift(50);
+  for (int i=0; i<8; ++i) {
+    const double ppm=i%2 ? 50.0 : -50.0;
+    mockMonoUs += 3600ULL*1000000;
+    receiveReply(ntpLastEpochUs+3600LL*1000000+(int64_t)(3600*ppm));
+    assert(clockDriftBoundPpm >= 161.0);
+    assert(clockTrusted());
+  }
+  // Signed EMA heads toward zero, while the trust envelope retains magnitude.
+  assert(fabs(ntpDriftPpm) < 20 && clockDriftBoundPpm > 160);
+  const uint32_t count=clockNtpSyncCount;
+  const int64_t anchor=ntpLastEpochUs;
+  mockMonoUs+=60000000;
+  receiveReply(anchor+60LL*1000000+3600LL*1000000);
+  assert(clockNtpSyncCount==count && !clockTrusted() && clockNtpRejectedCount==1);
+  // Rejected time never reaches settimeofday, even briefly.
+  assert(restoredEpochUs==anchor && sdkSyncStatus==SNTP_SYNC_STATUS_RESET && sdkNextTimeoutMs==15000);
+  mockMonoUs+=15000000;
+  receiveReply(anchor+75LL*1000000);
+  assert(clockNtpSyncCount==count+1 && clockTrusted() && !clockNtpRejected);
+  resetClock(); receiveReply(0);
+  assert(!clockNtpEverSynced && clockNtpRejectedCount==1 && !clockTrusted());
+  mockMonoUs=0x100000000ULL*1000000ULL+1234567;
+  assert(monotonicUptimeSeconds()==0x100000001ULL);
+  puts("Absolute uncertainty retains sign reversals; implausible corrections lose trust/restore anchor; 64-bit uptime");
 }
 unsigned bitCount(unsigned symbol) { return (symbol&1) + ((symbol>>1)&1); }
 unsigned decode(const int* positions, int count, int base) {
@@ -263,6 +301,7 @@ int main(int argc, char** argv) {
   else if (test == "isolation") testTimezoneIsolation();
   else if (test == "short_replies") testNtpShortReplies();
   else if (test == "adaptive") testAdaptiveTrust();
+  else if (test == "reliability") testDriftReversalsAndRejectedCorrections();
   else if (test == "bpc") testBpcBlocks();
   else assert(false);
   puts("PASS");
@@ -282,7 +321,8 @@ class ClockAndEncoderTests(unittest.TestCase):
         functions = ['btWeekday', 'btNthSunday', 'btLastSunday', 'btDayOfYear',
                      'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
                      'posixTzFor', 'applyTimezone', 'stationTime', 'clearTxFrame',
-                     'mb_bpc', 'configureAdaptiveNtp', 'onNtpSync']
+                     'mb_bpc', 'configureAdaptiveNtp', 'ntpReplyPlausible', 'rejectNtpReply',
+                     'onNtpSync', 'sntp_sync_time']
         body = '\n'.join(function(source, name) for name in functions)
         cls.directory = tempfile.TemporaryDirectory(prefix='radioclock-clock-tests-')
         path = Path(cls.directory.name)
@@ -311,6 +351,9 @@ class ClockAndEncoderTests(unittest.TestCase):
 
     def test_live_sntp_interval_resyncs_before_error_and_holdover_limits(self):
         self.run_case('adaptive')
+
+    def test_absolute_drift_envelope_rejected_corrections_and_multi_year_uptime(self):
+        self.run_case('reliability')
 
     def test_bpc_block_numbers_parity_fields_and_pulse_envelopes(self):
         self.run_case('bpc')

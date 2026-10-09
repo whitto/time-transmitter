@@ -29,3 +29,4 @@ bash "$repo_dir/scripts/install-local-library.sh"
 "$cli" compile --fqbn "$fqbn" --jobs "$jobs" \
   --build-path "$build_dir" --output-dir "$output_dir" "$sketch" "$@"
 python3 "$repo_dir/scripts/validate-crash-gate-elf.py" "$output_dir/RadioClock_V4_14.ino.elf"
+python3 "$repo_dir/scripts/validate-reliability-elf.py" "$output_dir/RadioClock_V4_14.ino.elf"

@@ -92,9 +92,9 @@ int main() {
 '''
 
 POWER_CASES = r'''
-void inspectPower() { tick+=5001; updateWifiPowerManagement(); }
+void inspectPower() { tick+=5001; updateWifiPowerManagement(); checkWiFiConnection(); }
 void setupScheduled() {
-  reset(); ap_mode=false; radioPaused=false; WiFi.modeValue=WIFI_STA;
+  reset(); ap_mode=false; radioPaused=false; WiFi.modeValue=WIFI_STA; WiFi.connection=WL_CONNECTED;
   wifiPowerMode=WIFI_POWER_SCHEDULED;
   bootMillis=tick-WIFI_BOOT_ON_DURATION_MS-1000;
   wifiAccessEnabled=true; wifiAccessTimezone="Australia/Brisbane";
@@ -138,7 +138,7 @@ int main() {
   // existing ownership. A scheduled boundary cannot disconnect a user.
   setupScheduled(); ap_mode=true; inspectPower();
   assert(wifiRadioEnabled && WiFi.disconnects==0 && WiFi.begins==0);
-  ap_mode=false; wifiConnectionPending=true; inspectPower();
+  ap_mode=false; WiFi.connection=0; wifiConnectionPending=true; wifi_connect_start=tick; inspectPower();
   assert(wifiRadioEnabled && WiFi.disconnects==0 && WiFi.begins==0);
   wifiConnectionPending=false; inspectPower(); assert(!wifiRadioEnabled);
 
@@ -304,9 +304,9 @@ int main() {
         source = FIRMWARE.read_text()
         prefix = workflow.MOCKS.split('struct SerialMock {', 1)[0]
         mocks = recovery.MOCKS.replace('bool wifiAccessWindowOpen() { return accessWantsWifi; }', '')
-        mocks = mocks.replace('static void beginWifiCredentialConnection();', '')
         names = ['configureNtpClient', 'ntpstart', 'ntpstop', 'startAPMode',
-                 'stopAPMode', 'checkWiFiConnection', 'updateWifiPowerManagement']
+                 'stopAPMode', 'beginWifiCredentialConnection', 'checkWiFiConnection',
+                 'wifiClockSyncWindowOpen', 'updateWifiPowerManagement']
         functions = self.timezone_functions(source)
         functions += '\n\n' + '\n\n'.join(workflow.extract_function(
             source.replace('void\nntpstop(', 'void ntpstop('), name) for name in names)
@@ -322,8 +322,8 @@ int main() {
         mocks = mocks.replace('flash[to] = flash.at(from);',
                               'if (!accessRenameOk) return false; flash[to] = flash.at(from);')
         mocks = mocks.replace('struct File {', 'extern bool accessShortWrite;\nstruct File {')
-        mocks = mocks.replace('size_t print(const String& s) { *contents += s.s; return s.length(); }',
-                              'size_t print(const String& s) { *contents += s.s; return accessShortWrite ? 0 : s.length(); }')
+        mocks = mocks.replace('contents->append(reinterpret_cast<const char*>(data), count); return count;',
+                              'contents->append(reinterpret_cast<const char*>(data), count); return accessShortWrite ? 0 : count;')
         mocks = mocks.replace('static bool validTimezoneName(const String&) { return true; }',
                               workflow.extract_function(source, 'validTimezoneName'))
         unit = unit.replace(workflow.MOCKS, mocks, 1)

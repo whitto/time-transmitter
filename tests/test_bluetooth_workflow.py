@@ -52,7 +52,7 @@ def balanced_block(source, start):
 
 
 def extract_function(source, name):
-    match = re.search(r'^(?:static )?(?:bool|void|int|String) ' + name +
+    match = re.search(r'^(?:static )?(?:bool|void|int|String|const char\*) ' + name +
                       r'\([^;]*?\)\s*\{', source, re.M)
     if not match:
         raise AssertionError(f'Function {name} missing')
@@ -62,6 +62,18 @@ def extract_function(source, name):
 def extract_route(source, path):
     start = source.index(f'server.on("{path}", HTTP_POST, []() {{')
     return balanced_block(source, start) + ');'
+
+
+def transaction_deadline_source(source):
+    """Use the shipped deadline state/predicate in focused watch fixtures."""
+    declarations = []
+    for name in ('btTransactionActive', 'btTransactionStartedMillis', 'BT_TRANSACTION_DEADLINE_MS'):
+        match = re.search(r'^static [^\n]*\b' + name + r'[^\n]*;', source, re.M)
+        if not match:
+            raise AssertionError(f'Transaction deadline declaration {name} missing')
+        declarations.append(match.group())
+    return '\n'.join(declarations + [extract_function(source, name) for name in
+                                    ('btTransactionDeadlineReached', 'btTransactionCancelled')]) + '\n'
 
 
 MOCKS = r'''
@@ -84,6 +96,8 @@ MOCKS = r'''
 #include "CasioWatchBattery.h"
 #include "BtSyncHistory.h"
 #include "RadioWifiAccessWindow.h"
+#include "RadioConfigWriter.h"
+#include "RadioJsonWriter.h"
 #define portENTER_CRITICAL(x) ((void)0)
 #define portEXIT_CRITICAL(x) ((void)0)
 #define portMUX_INITIALIZER_UNLOCKED 0
@@ -244,19 +258,22 @@ struct ServerMock {
   String response;
   bool hasArg(const char* key) const { return args.count(key); }
   String arg(const char* key) const { auto i = args.find(key); return i == args.end() ? String() : i->second; }
+  size_t contentLength = 0;
+  void setContentLength(size_t n) { contentLength = n; }
+  void sendContent(const char* data, size_t n) { response.s.append(data,n); assert(response.length()==contentLength); }
   void send(int c, const char*, const String& body) { code = c; response = body; }
   void on(const char* path, int, std::function<void()> fn) { routes[path] = fn; }
   void post(const char* path, std::map<std::string, String> values = {}) {
     args = std::move(values); code = 0; response = ""; routes.at(path)(); assert(code);
   }
 } server;
-String jsonQuoted(const String& s) { return String("\"") + s + "\""; }
 std::map<std::string, std::string> flash;
 struct File {
   std::string* contents = nullptr;
   size_t position = 0;
   explicit operator bool() const { return contents; }
   size_t size() const { return contents ? contents->size() : 0; }
+  bool seek(size_t offset) { position = offset; return offset <= size(); }
   size_t read(uint8_t* out, size_t count) {
     const size_t available = position < size() ? size() - position : 0;
     count = std::min(count, available);
@@ -303,11 +320,15 @@ int btTimeOffsetMinutes = 0;
 std::atomic<bool> activityLedEnabled{true};
 bool configDirty = false;
 unsigned long configDirtyBecause = 0;
+constexpr unsigned long CONFIG_SAVE_DEBOUNCE_MS = 3000;
+bool filesystemAvailable = true, configStorageFault = false;
+static char storageSerializationBuffer[2048];
 static bool validTimezoneName(const String&) { return true; }
 '''
 
 HELPERS = r'''
 static bool bleOperationCancelled() { return radioBleArbiter.rfRequested() || radioBleArbiter.rfOwned(); }
+static bool bluetoothMemoryAvailable(bool = false) { return true; }
 static const char* btPhase = "Idle";
 static void setBluetoothPhase(const char* phase) { btPhase = phase; }
 static int btDeferredSlot = -1;
@@ -315,6 +336,7 @@ static unsigned long btShutdownRetryMillis = 0;
 static bool btInitFailed = false;
 static RadioBleScanControl btScanControl;
 bool mockQuiescent = true, writeResult = true, preemptWrite = false;
+static bool serviceBtClientQuarantine() { return !btBleBusy || mockQuiescent; }
 int disconnects = 0, barriersReleased = 0, writes = 0, lastWriteProtocol = -1;
 static bool btClientQuiescent() { return mockQuiescent; }
 static void disconnectGShock() { ++disconnects; btBleBusy = !mockQuiescent; }
@@ -413,7 +435,7 @@ int main(int argc, char** argv) {
   // Passive listening never starts unbound or after selecting a mismatched protocol.
   btAlwaysWaitEnabled = true;
   serviceBluetoothSync(); assert(!btWindowActive && mockScan.starts == 0);
-  assert(bluetoothState() == "No watch paired");
+  assert(std::strcmp(bluetoothStateText(), "No watch paired") == 0);
   bind(); btManualProtocol = BT_PROTOCOL_STANDARD;
   serviceBluetoothSync(); assert(!btWindowActive);
   server.post("/api/bluetooth-sync"); assert(server.code == 409 && !btManualSyncRequested);
@@ -727,11 +749,12 @@ class BluetoothWorkflowTest(unittest.TestCase):
                  'bluetoothControllerNeeded', 'shutdownIdleBluetooth',
                  'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'commitBluetoothBattery', 'attemptBluetoothSync', 'serviceBluetoothSync',
-                 'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothState', 'btWeekday', 'btNthSunday',
+                 'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothStateText', 'sendBoundedJson', 'btWeekday', 'btNthSunday',
                  'btLastSunday', 'btDayOfYear', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
-                 'loadConfig', 'captureLegacyBluetoothHistory', 'clearBluetoothRuntimeHistory',
-                 'loadBluetoothHistory', 'saveBluetoothHistoryNow', 'writeConfigNow', 'saveConfig']
-        functions = '\n\n'.join(extract_function(source, n) for n in names)
+                 'configFileLayoutValid', 'loadConfig', 'captureLegacyBluetoothHistory', 'clearBluetoothRuntimeHistory',
+                 'loadBluetoothHistory', 'saveBluetoothHistoryNow', 'tempFileMatches', 'configSaveFailed',
+                 'writeConfigNow', 'saveConfig']
+        functions = 'static char apiResponseBuffer[8192];\n' + '\n\n'.join(extract_function(source, n) for n in names)
         routes = '\n'.join(extract_route(source, path) for path in
                            ['/api/settings', '/api/bluetooth-pair', '/api/bluetooth-sync'])
         protocol_branch = balanced_block(source, source.index('if (server.hasArg("bt_manual_protocol"))'))

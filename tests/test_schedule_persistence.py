@@ -157,7 +157,7 @@ class SchedulePersistenceTest(unittest.TestCase):
         source = FIRMWARE.read_text()
         unit_source = workflow.BluetoothWorkflowTest().unit_source(source)
         mocks = MOCKS
-        mocks = mocks.replace('#include "RadioBleArbiter.h"', '#include "ArduinoJson.h"\n#include "RadioBleArbiter.h"')
+        mocks = mocks.replace('#include "RadioBleArbiter.h"', '#include "ArduinoJson.h"\n#include "RadioBleArbiter.h"\n#include "RadioReliability.h"')
         mocks = mocks.replace('struct SerialMock {', '''
 DeserializationError deserializeJson(JsonDocument& doc, String json) {
   return ArduinoJson::deserializeJson(doc, json.c_str());
@@ -172,7 +172,13 @@ struct TimeSchedule {
 };
 TimeSchedule schedules[MAX_SCHEDULES]{};
 bool rfPaused = false;
-bool radioSetPaused(bool pause) { rfPaused = pause; return true; }''')
+bool radioSetPaused(bool pause) { rfPaused = pause; return true; }
+bool radioAcquirePause(RadioPauseLease& lease) {
+  lease.wasPaused=rfPaused; lease.acquired=true; rfPaused=true; return true;
+}
+bool radioReleasePause(RadioPauseLease& lease) {
+  assert(lease.acquired); lease.acquired=false; rfPaused=lease.wasPaused; return true;
+}''')
         mocks = mocks.replace('  void flush() {}', '''
   size_t write(uint8_t value) { contents->push_back(char(value)); return 1; }
   void flush() {}''')

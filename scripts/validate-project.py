@@ -13,6 +13,7 @@ source = (sketch / f"{sketch.name}.ino").read_text()
 html = (root / "ui/radioclock.html").read_text()
 assert f"// {sketch.name}.ino" in source
 assert '#define FIRMWARE_VERSION "V4.14"' in source
+assert '#define FIRMWARE_BUILD "R2"' in source
 assert '// Firmware Version: V4.14' in source
 assert "V4.14" in html and "V3.2.2" not in html
 assert 'id="btTime"' in html and 'id="btTimezone"' in html and 'id="btTimeOffset"' in html
@@ -58,5 +59,9 @@ assert max(offset+size for _,_,offset,size in parts) <= 4*1024*1024
 assert any(kind == "app" and size == 3*1024*1024 for _,kind,_,size in parts)
 assert any(name == "coredump" and size == 64*1024 for name,_,_,size in parts)
 assert '#include <RadioCrashDumpGate.h>' in source, "Crash-dump toggle requires its panic gate"
+assert '#include "RadioJsonWriter.h"' in source
+assert '#include "RadioReliability.h"' in source
+assert 'NIMBLE_RADIOCLOCK_RELIABILITY_PATCH' in source, "Use the reviewed NimBLE source"
+assert 'extern "C" void sntp_sync_time' in source, "Gate invalid NTP corrections before committing time"
 print(f"PASS: gzip round-trip ({len(compressed):,} bytes), JavaScript syntax, "
       f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.14 versions, 4 MB partitions")

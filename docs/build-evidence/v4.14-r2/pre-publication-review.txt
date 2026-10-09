@@ -1,0 +1,11 @@
+V4.14 R2 independent reliability review — 9 October 2026
+No unresolved blocking code defect found after integration.
+Reviewed: allocations, fixed response/storage buffers, callback/client lifetimes,
+RF/BLE exclusion, generation-owned pause/cancellation, timer qualification,
+bounded recovery, startup/loop/radio progress supervision, rollover, NTP acceptance,
+Wi-Fi recovery, flash-write policy, dependency provenance and UI polling.
+Review corrections: pre-commit SNTP gate; checked client/app timer creation;
+bounded boot config parsing; monitor before BLE initialization; idempotent monitor.
+Focused fault/sanitizer/browser checks passed. Full suite runs after publication
+as instructed. Host allocation stress is not a guarantee of ESP32 SDK allocation
+safety or multi-year physical reliability. Real RF/BLE and hardware soak outstanding.

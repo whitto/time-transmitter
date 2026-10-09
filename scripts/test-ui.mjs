@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.14', radio_active: false, station: -1,
+  firmware_version: 'V4.14', firmware_build: 'R2', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -69,6 +69,9 @@ let releaseConfig;
 let deferNextConfig = false;
 let releaseSetting;
 let deferNextSetting = false;
+let hangNextStatus = false, invalidNextStatus = false;
+const timeoutCallbacks = new Map(); let timeoutId = 0;
+let confirmAnswer = true;
 class FormData {
   constructor() { this.fields = []; }
   append(key, value) { this.fields.push([key, value]); }
@@ -116,6 +119,8 @@ const fetch = async (url, options = {}) => {
     return response(snapshot);
   }
   if (url === '/api/status') {
+    if(hangNextStatus){hangNextStatus=false;await new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('Aborted')),{once:true}));}
+    if(invalidNextStatus){invalidNextStatus=false;return {ok:true,status:200,json:async()=>{throw new SyntaxError('bad JSON')}}}
     const snapshot = { ...structuredClone(state), ...structuredClone(status) };
     if (deferNextStatus) {
       deferNextStatus = false;
@@ -123,6 +128,7 @@ const fetch = async (url, options = {}) => {
     }
     return response(snapshot);
   }
+  if (url === '/api/storage/reset') return response({status:'success'});
   if (url === '/api/stations') return response([{ id: 0, name: 'JJY', encoding: 'JJY 40 kHz' }]);
   if (url === '/api/schedules') return response([]);
   if (url === '/api/diagnostics') return response({ ...state, ...status, wifi_connected: true, heap_free: 100000, bt_connection_attempts: 12, bt_acked_writes: 30, bt_notifications: 20, bt_response_errors: 2 });
@@ -137,10 +143,10 @@ const fetch = async (url, options = {}) => {
   throw new Error(`Unexpected request: ${method} ${url}`);
 };
 const context = vm.createContext({
-  document: { getElementById: element, querySelectorAll: () => [], activeElement: null },
+  document: { getElementById: element, querySelectorAll: () => [], activeElement: null, hidden: false, addEventListener() {} },
   localStorage: { getItem: () => null, setItem() {} },
-  fetch, FormData, setTimeout: () => 1, clearTimeout() {}, setInterval() {},
-  scrollTo() {}, confirm: () => true, console,
+  fetch, FormData, AbortController, performance, setTimeout: (callback,ms)=>{const id=++timeoutId;timeoutCallbacks.set(id,{callback,ms});return id}, clearTimeout(id){timeoutCallbacks.delete(id)}, setInterval() {},
+  scrollTo() {}, confirm: () => confirmAnswer, console,
 });
 const evaluate = code => vm.runInContext(code, context);
 evaluate(source);
@@ -152,7 +158,7 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.14');
+assert.equal(element('fw').textContent, 'V4.14 R2');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'BT sync indicator');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
@@ -586,3 +592,71 @@ assert.match(diagSummary(ds,{full_time_tx:true,full_time_station:2},[{station:0,
 assert.match(diagSummary(ds,{},[{station:2,start:0,end:1440}])[1],/No JJY transmission scheduled/);
 assert.match(diagSummary({...ds,clock_state:'Unsynchronized'},{},[])[1],/Unknown/);
 console.log('Diagnostics summary checks passed: Always Wait, RF pause, next-day JJY, active windows, full-time overrides and unknown clock.');
+
+// Unattended browser sessions use one bounded status poll; full diagnostics
+// are requested only on their visible page and share any active status request.
+await evaluate("showView('home')");
+const idleStart=requests.length;
+for(let i=0;i<60;i++)await evaluate('tick()');
+assert.equal(requests.length-idleStart,60,'one status request per Overview tick');
+assert.ok(requests.slice(idleStart).every(r=>r.url==='/api/status'),'no idle diagnostics/config/schedule bundle');
+assert.equal(evaluate('typeof statusPromise'), 'object');
+evaluate('document.hidden=true');
+const hiddenStart=requests.length;await evaluate('tick()');await evaluate('updateDiagnostics()');
+assert.equal(requests.length,hiddenStart,'hidden browser tabs stop periodic requests');
+evaluate('document.hidden=false');
+const overlapStart=requests.length;deferNextStatus=true;
+const overlapping=Array.from({length:20},()=>evaluate('tick()'));
+assert.equal(requests.length-overlapStart,1,'twenty overlapping ticks share one status request');
+releaseStatus();await Promise.all(overlapping);
+const diagnosticsStart=requests.length;
+evaluate("showView('advanced')");await evaluate('updateDiagnostics(true)');
+assert.equal(requests.length-diagnosticsStart,4,'Diagnostics navigation requests a single full bundle');
+const intervalStart=requests.length;await evaluate('tick()');
+assert.equal(requests.length-intervalStart,1,'Diagnostics interval prevents frequent full bundles');
+evaluate('diagAt=performance.now()-DIAGNOSTICS_INTERVAL_MS');
+const dueStart=requests.length;await evaluate('tick()');await evaluate('diagPromise');
+assert.equal(requests.length-dueStart,4,'due diagnostics reuses the status already fetched by tick');
+await evaluate("showView('settings')");evaluate('diagAt=0');
+const awayStart=requests.length;await evaluate('tick()');
+assert.equal(requests.length-awayStart,1,'leaving Diagnostics stops its bundles');
+
+// An earlier config response cannot replace a later read, even without a write.
+deferNextConfig=true;state.ssid='older read';const olderRead=evaluate('loadConfig()');
+state.ssid='newer read';await evaluate('loadConfig()');releaseConfig();await olderRead;
+assert.equal(element('ssid').value,'newer read','out-of-order configuration response discarded');
+state.bt_always_wait=false;await evaluate('loadConfig()');deferNextConfig=true;
+const olderAlways=evaluate('loadConfig()');await evaluate('setBtAlwaysWait(true)');releaseConfig();await olderAlways;
+assert.equal(element('btAlwaysWait').checked,true,'old configuration cannot undo any saved setting');
+
+// A lost HTTP response must release the in-flight guard so polling recovers.
+hangNextStatus=true;const lostPoll=evaluate('tick()');
+const requestTimeout=[...timeoutCallbacks.values()].find(x=>x.ms===8000);
+assert.ok(requestTimeout,'GET requests have an eight-second deadline');requestTimeout.callback();await lostPoll;
+assert.equal(element('liveText').textContent,'Offline');assert.equal(evaluate('statusPromise'),null);
+await evaluate('tick()');assert.equal(element('liveText').textContent,'Live','polling recovers after timeout');
+invalidNextStatus=true;await evaluate('tick()');assert.equal(element('liveText').textContent,'Offline','malformed JSON cannot masquerade as live status');
+await evaluate('tick()');
+
+// Storage recovery is explicit and offered only for a mount failure in setup AP.
+evaluate('renderStorageHealth({filesystem_available:true,config_storage_fault:false})');
+assert.equal(element('storage-recovery-settings').hidden,true);
+evaluate('renderStorageHealth({filesystem_available:true,config_storage_fault:true,ap_mode:true})');
+assert.equal(element('storage-recovery-settings').hidden,false);assert.equal(element('storageResetButton').hidden,true,'save failures never offer erase');
+evaluate('renderStorageHealth({filesystem_available:false,ap_mode:false})');
+assert.equal(element('storageResetButton').hidden,true,'erase unavailable in station mode');
+evaluate('renderStorageHealth({filesystem_available:false,ap_mode:true})');
+assert.equal(element('storageResetButton').hidden,false);
+confirmAnswer=false;const cancelStart=requests.length;await evaluate('resetSavedSettings($("storageResetButton"))');
+assert.equal(requests.length,cancelStart,'cancelled destructive confirmation sends no request');
+confirmAnswer=true;await evaluate('resetSavedSettings($("storageResetButton"))');
+assert.deepEqual(requests.at(-1),{url:'/api/storage/reset',method:'POST',fields:{confirm:'ERASE_SAVED_SETTINGS'}});
+assert.match(element('toast').textContent,/Reconnect to the RadioStation/);
+
+evaluate('schedules=Array.from({length:24},()=>({station:0,start:0,end:60}))');
+await evaluate('addSchedule()');assert.equal(evaluate('schedules.length'),24,'UI schedule count is bounded');
+console.log('V4.14 R2 polling reliability checks passed: page/visibility gating, bounded/coalesced requests, timeout recovery, invalid JSON, out-of-order config, saved settings protection and explicit fault-only storage recovery.');
+
+assert.equal(evaluate("formatUptime(450249)"),"125h 04m 09s");
+assert.equal(evaluate("formatUptime(0)"),"0h 00m 00s");
+assert.equal(evaluate("formatUptime(null)"),"Unavailable");

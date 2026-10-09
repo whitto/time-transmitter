@@ -30,14 +30,8 @@ def extract_function(source, name):
 
 
 def extract_radio_command_tick(source):
-    """Run the task's real command block once instead of its infinite loop."""
-    task = extract_function(source, 'radioTask')
-    prefix, loop = task.split('for (;;) {', 1)
-    # Preserve task-owned acknowledgement state across these single-tick calls.
-    persistent = re.findall(r'^\s*bool (\w+) = false;.*$', prefix, re.M)
-    declarations = '\n'.join(f'static bool {name} = false;' for name in persistent)
-    commands = loop.split('// Derive the frame phase', 1)[0]
-    return f'void radioCommandTick() {{\n{declarations}\nfor (int tick=0;tick<1;++tick) {{\n{commands}\n}}\n}}'
+    """Exercise the RF task's production command helper once."""
+    return extract_function(source, 'radioProcessPauseCommand')
 
 
 MOCKS = r'''
@@ -47,6 +41,7 @@ MOCKS = r'''
 #include <ctime>
 #include <initializer_list>
 #include "firmware/RadioClock_V4_14/RadioBleArbiter.h"
+#include "firmware/RadioClock_V4_14/RadioReliability.h"
 #define PIN_RADIO 12
 #define PIN_LED 25
 #define PIN_BUZZ 26
@@ -74,12 +69,17 @@ bool carrierReady = false;
 std::atomic<bool> rfSilenceFailed{false};
 int ampmod = 0;
 int buzzout = 0;
-std::atomic<bool> radioPauseRequested{false}, radioResumeRequested{false};
-std::atomic<bool> radioPaused{false}, radioPauseAck{false}, encodingRefreshRequested{false};
+RadioPauseControl radioPauseControl;
+std::atomic<bool> radioPaused{false}, encodingRefreshRequested{false};
+std::atomic<bool> radioApPauseOwned{false}, radioFaultLatched{false};
+int radioCommandMux = 0;
+#define portENTER_CRITICAL(mux) ((void)(mux))
+#define portEXIT_CRITICAL(mux) ((void)(mux))
 unsigned ulTaskNotifyTake(bool, unsigned) { return 1; }
 void (*makebitpattern)(void) = nullptr;
 unsigned long clockMillis = 0;
 unsigned long millis() { return clockMillis; }
+int64_t esp_timer_get_time() { return (int64_t)clockMillis * 1000; }
 bool clockTrusted() { return trusted; }
 bool dutyWriteSucceeds = true, detachSucceeds = true;
 unsigned duty = 0, dutyWrites = 0, detachCalls = 0, forcedLowWrites = 0;
@@ -204,22 +204,19 @@ int main() {
   reset();
   transmitting();
   dutyWriteSucceeds = detachSucceeds = false;
-  radioPauseRequested = true;
-  radioCommandTick();
-  assert(radioPaused && !radioPauseAck && rfSilenceFailed);
+  auto pauseGeneration = radioPauseControl.submit(true, esp_timer_get_time(), 2000000);
+  radioProcessPauseCommand();
+  assert(radioPaused && !radioPauseControl.acknowledged(pauseGeneration) && rfSilenceFailed);
   assert(radioBleArbiter.rfOwned());
   dutyWriteSucceeds = true;
-  radioCommandTick(); // failed pause can acknowledge after a successful retry
-  assert(radioPaused && radioPauseAck && duty == 0);
+  radioProcessPauseCommand(); // failed pause can acknowledge after a successful retry
+  assert(radioPaused && radioPauseControl.acknowledged(pauseGeneration) && duty == 0);
 
-  // Preempt loopTask between Ack=false and ResumeRequested=true. An old paused
-  // tick must not acknowledge the next request before it was even published.
-  radioPauseAck = false;
-  radioCommandTick();
-  assert(radioPaused && !radioPauseAck);
-  radioResumeRequested = true;
-  radioCommandTick();
-  assert(!radioPaused && radioPauseAck && encodingRefreshRequested);
+  // A distinct generation cannot reuse the preceding pause acknowledgement.
+  auto resumeGeneration = radioPauseControl.submit(false, esp_timer_get_time(), 2000000);
+  assert(!radioPauseControl.acknowledged(resumeGeneration));
+  radioProcessPauseCommand();
+  assert(!radioPaused && radioPauseControl.acknowledged(resumeGeneration) && encodingRefreshRequested);
   puts("Real RF handoff tests passed: silence failure, detach recovery, lost confidence, scheduled/full-time preemption");
 }
 '''
