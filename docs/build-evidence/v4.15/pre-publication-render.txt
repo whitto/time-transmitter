@@ -1,1 +1,0 @@
-PASS: pre-publication visual preview, unchanged eight sidebar routes, new diagnostic fields, four success/failure Watch rows and h/m/s uptime, desktop and phone; full browser suite remains pending publication.

@@ -1,8 +1,0 @@
-test_profile_races_restart_and_snapshot_separation (tests.test_recent_sync_ui.RecentSyncUiTest.test_profile_races_restart_and_snapshot_separation) ... ok
-test_recent_success_failure_and_bounded_safe_rows (tests.test_recent_sync_ui.RecentSyncUiTest.test_recent_success_failure_and_bounded_safe_rows) ... ok
-test_shared_overview_diagnostics_uptime_and_existing_layout (tests.test_recent_sync_ui.RecentSyncUiTest.test_shared_overview_diagnostics_uptime_and_existing_layout) ... ok
-
-----------------------------------------------------------------------
-Ran 3 tests in 0.180s
-
-OK

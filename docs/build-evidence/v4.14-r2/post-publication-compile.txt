@@ -1,9 +1,0 @@
-PASS: NimBLE-Arduino 2.5.1-radioclock.1, 475 upstream files, 9 documented source changes
-PASS: NimBLE-Arduino 2.5.1-radioclock.1, 475 upstream files, 9 documented source changes
-Pinned NimBLE source already installed; retained toolchain reused
-Library RadioCrashDumpGate has been declared precompiled:
-Using precompiled library in /workspace/.radioclock-tools/user/libraries/RadioCrashDumpGate/src/esp32
-Sketch uses 1427796 bytes (68%) of program storage space. Maximum is 2097152 bytes.
-Global variables use 73056 bytes (22%) of dynamic memory, leaving 254624 bytes for local variables. Maximum is 327680 bytes.
-PASS crash dump gate: SDK panic -> IRAM wrapper; Off skips flash writer; On delegates to SDK; aligned DRAM flag 0x3ffbf998
-PASS: strong sntp_sync_time at 0x400d6488; SDK sntp_set_system_time CALL8 at 0x4011bf51 dispatches to the pre-commit gate
