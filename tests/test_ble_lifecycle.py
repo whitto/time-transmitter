@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_13/RadioClock_V4_13.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
 
 
 def extract_function(source, name):

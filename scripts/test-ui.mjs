@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.13', radio_active: false, station: -1,
+  firmware_version: 'V4.14', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -90,7 +90,7 @@ const fetch = async (url, options = {}) => {
       return response({ status: 'error', message: led ? 'LED setting could not be saved' : 'Rejected setting' }, led ? 500 : 409);
     }
     for (const [key, value] of Object.entries(fields)) {
-      if (['bt_always_wait', 'activity_led_enabled', 'bt_idle_power_save', 'bt_history_persist', 'wifi_access_enabled'].includes(key)) state[key] = value === '1';
+      if (['bt_always_wait', 'activity_led_enabled', 'bt_idle_power_save', 'bt_history_persist', 'wifi_access_enabled', 'crash_dump_enabled'].includes(key)) state[key] = value === '1';
       else if (['wifi_power_mode', 'bt_manual_profile', 'bt_manual_protocol', 'wifi_access_start', 'wifi_access_end'].includes(key)) state[key] = Number(value);
       else if (key === 'bt_time_offset_minutes') state[key] = Number(value);
       else if (key === 'wifi_access_timezone') state[key] = value;
@@ -152,7 +152,7 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.13');
+assert.equal(element('fw').textContent, 'V4.14');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'BT sync indicator');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
@@ -452,6 +452,45 @@ releaseSetting();await pendingWifiMode;
 assert.equal(element('wifiAccessEnabled').disabled,false);
 assert.equal(element('wifiAccessSave').disabled,false);
 
+// Crash dumping is opt-in and separate from the daily BT snapshot preference.
+assert.equal(element('crashDumpEnabled').checked,false);
+assert.equal(element('crashDumpStatus').textContent,'Off');
+assert.equal(element('crashDumpEnabled').disabled,false,'legacy mock/config without capability field supports toggle');
+const crashRequestStart=requests.length;
+await evaluate('setCrashDumpEnabled(true)');
+assert.deepEqual(requests.slice(crashRequestStart).find(r=>r.method==='POST'),{url:'/api/config',method:'POST',fields:{crash_dump_enabled:'1'}});
+assert.equal(element('crashDumpEnabled').checked,true);assert.equal(element('crashDumpStatus').textContent,'On');
+assert.equal(element('crashDumpEnabled').disabled,false);
+await evaluate('loadConfig()');assert.equal(element('crashDumpEnabled').checked,true);
+failNextSettings=true;await evaluate('setCrashDumpEnabled(false)');
+assert.equal(element('crashDumpEnabled').checked,true,'rejected crash preference restores saved choice');
+assert.equal(element('crashDumpEnabled').disabled,false);
+deferNextStatus=true;const staleCrashStatus=evaluate('tick()');
+await evaluate('setCrashDumpEnabled(false)');releaseStatus();await staleCrashStatus;
+assert.equal(element('crashDumpEnabled').checked,false,'late status cannot undo saved crash preference');
+deferNextConfig=true;const staleCrashConfig=evaluate('loadConfig()');
+await evaluate('setCrashDumpEnabled(true)');releaseConfig();await staleCrashConfig;
+assert.equal(element('crashDumpEnabled').checked,true,'late config cannot undo saved crash preference');
+deferNextSetting=true;const pendingCrashSave=evaluate('setCrashDumpEnabled(false)');
+assert.equal(element('crashDumpEnabled').disabled,true);assert.equal(element('crashDumpStatus').textContent,'Saving…');
+await evaluate('loadConfig()');await evaluate('renderStatus({...lastStatus,crash_dump_enabled:true})');
+assert.equal(element('crashDumpEnabled').checked,false,'reads during save keep visible choice');
+assert.equal(element('crashDumpStatus').textContent,'Saving…');
+releaseSetting();await pendingCrashSave;assert.equal(element('crashDumpEnabled').disabled,false);
+assert.equal(state.crash_dump_enabled,false);
+assert.match(html,/Off blocks new dumps and keeps any existing dump/);
+assert.match(html,/No continuous logs are written/);
+assert.match(element('crashDumpHelp').textContent,/separate from daily Bluetooth status snapshots.*no once-per-day limit/);
+state.crash_dump_available=false;await evaluate('tick()');
+assert.equal(element('crashDumpEnabled').disabled,true);assert.equal(element('crashDumpStatus').textContent,'Unavailable');
+const unavailableCrashPosts=requests.filter(r=>r.method==='POST').length;
+await evaluate('setCrashDumpEnabled(true)');
+assert.equal(requests.filter(r=>r.method==='POST').length,unavailableCrashPosts,'unsupported core must not send enable request');
+assert.match(element('crashDumpHelp').textContent,/unavailable with this ESP32 core\/build/);
+state.crash_dump_available=true;await evaluate('tick()');assert.equal(element('crashDumpEnabled').disabled,false);
+assert.equal(state.bt_history_persist,undefined,'crash preference does not change daily BT retention');
+console.log('V4.14 crash toggle checks passed: default Off, persistence, rollback, pending/late reads, unsupported core and independent daily BT history.');
+
 // Daily history is a durable preference, while polling never writes snapshots.
 assert.equal(element('btHistoryPersist').checked,true);
 const historyRequestStart=requests.length;
@@ -531,7 +570,7 @@ assert.match(element('diagnostics').textContent,/Last successful BT sync.*2026-1
 assert.match(element('diagnostics').textContent,/BT saved snapshot.*2026-10-09 06:30:17/);
 assert.match(element('diagnostics').textContent,/BLE connects.*12 \/ 30 \/ 20 \/ 2/);
 assert.match(element('diagnostics').textContent,/Last BT outcome: Successful/);
-console.log('V4.13 UI checks passed: history persistence toggle/rollback/races, independent overnight Wi-Fi drafts/save/power mode, live RF/AP states and restored diagnostics.');
+console.log('V4.14 UI checks passed: history persistence toggle/rollback/races, independent overnight Wi-Fi drafts/save/power mode, live RF/AP states and restored diagnostics.');
 console.log('UI handler tests passed: font profile selection/persistence/rollback/stale reads, idle BT power saving, LED, schedules and existing sync/pair behavior.');
 
 // Diagnostics uses saved device schedules and station time, independent of BT zone.

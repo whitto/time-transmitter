@@ -21,3 +21,16 @@
 - [x] V4.13: daily Wi-Fi web-access window in Settings with start/end and an independent timezone, default disabled with 18:00–20:00 Brisbane selected. Enabling selects Power-save; overnight windows are supported and equal start/end rejected. Preserve setup AP, startup/recovery access and brief NTP wakeups; Always on overrides the window. Colour Wi-Fi status green for station/red for AP and radio status green active/red idle without changing the sidebar. Timezone/DST, power-exception, durable-config and browser checks pass.
 
 - [ ] Verify V4.13 on the physical Node32s/GW-BX5600: BT-only LED flashing, success hold/24-hour expiry/failure clearing/master Off, first daily history save and quota across reboot/toggle, RAM-only later events and battery readings, and daily Wi-Fi/NTP/AP access across ordinary and overnight windows. Do not erase saved settings for these checks.
+
+- [x] V4.14: add saved default-Off crash-dump storage toggle in Settings, separate from daily BT history. Restore the 64 KB core-dump slot without changing app/FS layout; use the source-only RadioCrashDumpGate library to gate the SDK writer. Off retains existing dumps; On permits future panic dumps without a daily quota. All 42 host cases, browser/native/config, Node32s compile, image and actual main-ELF gate checks pass. Physical crash storage acceptance remains outstanding.
+
+- [ ] Verify V4.14 crash storage on a spare/test ESP32: default/saved Off/On, no new dump with Off, SDK storage with On, existing dump retained when disabled and normal serial backtraces. Install the complete helper library and use the matching ELF; do not erase settings unnecessarily.
+
+- [x] V4.14: complete read-only long-run review in `docs/LONG_RUN_RELIABILITY_REVIEW.md`. No demonstrated growing application RAM leak; confirmed recovery/data-loss and dependency risks are documented with source/reproduction evidence. **Recommendations below remain unimplemented and need approval before working-function changes.**
+
+- [ ] P1 reliability follow-up: reject schedule serialization allocation/overflow/entry-count failures before touching storage; retain the previous schedule and test allocation failure.
+- [ ] P1 reliability follow-up: pin/validate the separate upstream NimBLE host-timer shutdown correction, preserving RF priority and testing repeated real shutdown/restart.
+- [ ] P1 reliability follow-up: recover station/NTP/RF automatically after router/AP fallback, with bounded retry while retaining setup access.
+- [ ] P1 reliability follow-up: wake NTP according to clock trust/adaptive deadlines independently of LF/BT/user access schedules, including all-day RF.
+- [ ] P1 reliability follow-up: handle delayed pause commands after timeout with explicit ownership/cancel/resume; keep RF off and expose a fault if timing initialization/progress fails.
+- [ ] P2 reliability follow-up: checked config/status serialization, safe filesystem mount recovery without automatic formatting, lighter/on-demand diagnostics, rollover-safe boot-access/uptime and measured task heartbeats/stack margins. Keep measurements in RAM/serial rather than flash logs. Review and accommodate bounded long operations before adding a progress watchdog.

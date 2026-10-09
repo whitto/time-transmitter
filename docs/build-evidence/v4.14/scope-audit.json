@@ -1,0 +1,107 @@
+{
+  "functions": {
+    "connectGShock": {
+      "unchanged": true,
+      "sha256": "93fba21def52676b113a90537b0aa42abce6354bbd3c58fe4d12cd4ab5ce8b36"
+    },
+    "disconnectGShock": {
+      "unchanged": true,
+      "sha256": "0a6e9dd16600bd188ab823df73251100ff5ca2a682e92c03bce98d7767d4d390"
+    },
+    "writeBt": {
+      "unchanged": true,
+      "sha256": "b9d2bd863fe3e6b1ec9d8527b978907c19f697f38f863c4f31e5552ad7478471"
+    },
+    "performGShockBX5600Sync": {
+      "unchanged": true,
+      "sha256": "eb55b39dd12c11ddcb07390986f65cc44b237416f63ec2dd9e775d87316d6acd"
+    },
+    "performCasioStandardTimeSync": {
+      "unchanged": true,
+      "sha256": "ff3e9e83f5ad33702d6a3743d5d0e08ba9b825f3223c0bcaadda4b4ee8128a71"
+    },
+    "applyBluetoothWatchFont": {
+      "unchanged": true,
+      "sha256": "5d97ed9ee4349531468725f4cd39f50082551ec92a13a88f1df2103b14df1971"
+    },
+    "attemptBluetoothSync": {
+      "unchanged": true,
+      "sha256": "036a19775c144d7ba9736dca88aa157c65d2ac713d45e0bcedff2ba43319af43"
+    },
+    "startAPMode": {
+      "unchanged": true,
+      "sha256": "45e5d9f90ba8f00952aeab9d2d6d7f6b5dec58525bf3e2ecb5e3386fe0c97d87"
+    },
+    "ntpstart": {
+      "unchanged": true,
+      "sha256": "7d148fa4f36090c2fef35155f6b0f4edf611392720d0e3b9a0ee91c879f521af"
+    },
+    "ntpstop": {
+      "unchanged": true,
+      "sha256": "32af6b851612fdc7f9e64866b2f5f5585978bcf82ec4af0a6bb9c3a91301bbb0"
+    },
+    "serviceAPStartup": {
+      "unchanged": true,
+      "sha256": "16905eb370a0a03c3ad6128895cf1248d84b842d8d1e7f5b4e7214e4fc4813f0"
+    },
+    "stopAPMode": {
+      "unchanged": true,
+      "sha256": "139dc6c5262d459a3c98645f246da1986a7ae8b08237ca1f21a201bf3010543c"
+    },
+    "beginWifiCredentialConnection": {
+      "unchanged": true,
+      "sha256": "3e72f7d55c55b93b4dab2a99c60bbd0adc871829e8a70dae876bece95c7a4167"
+    },
+    "checkWiFiConnection": {
+      "unchanged": true,
+      "sha256": "1fd0cd6f3e2a58e766692643ca0e369ef474455f6752fac82c3a39818eeac9b6"
+    },
+    "shouldWifiBeOnForSchedule": {
+      "unchanged": true,
+      "sha256": "b120b40e87b766cdd1060d052038fdb4dc22a435f240c5f8b0c1a6c5503fda11"
+    },
+    "updateWifiPowerManagement": {
+      "unchanged": true,
+      "sha256": "faae21d77deab95a950d3799c6eaf805ae1015e74cd1aa5b57b2a88d852b77df"
+    },
+    "radioTask": {
+      "unchanged": true,
+      "sha256": "9d13d5e6392edc9c03b158ad7d0a052509c60a7737d24fc5468384781f2c4e31"
+    },
+    "setstation": {
+      "unchanged": true,
+      "sha256": "e8867b9fff8fd7acf1d9d39b3988118ebc9e325ae6c375dd36b193adadde3596"
+    },
+    "stationTime": {
+      "unchanged": true,
+      "sha256": "88f777ed53dba2509f002d4294a506d8d2f0970d77292ca876a4264a0509bb89"
+    },
+    "starttimer": {
+      "unchanged": true,
+      "sha256": "8cc6013213529d587c21dae8e611291e1d0175b62e2a323fdc25d0b689f3445d"
+    },
+    "stoptimer": {
+      "unchanged": true,
+      "sha256": "6723ee10b360bb5fbc8336eb7142a2e87c6e3c20b6c65ff66ba46164718ffcce"
+    },
+    "saveSchedules": {
+      "unchanged": true,
+      "sha256": "12e3d943265ef3b6553aaa732fa03cc5e0451839c3653a490afcf22c76706742"
+    },
+    "radioSetPaused": {
+      "unchanged": true,
+      "sha256": "45df64754123a5d17db42672bf4f52042a123819bf9adb9abd4363e8fecebc92"
+    }
+  },
+  "companion_headers_unchanged": {
+    "BtSyncHistory.h": true,
+    "CasioBxProtocol.h": true,
+    "RadioBleScanControl.h": true,
+    "CasioWatchSettings.h": true,
+    "RadioBleArbiter.h": true,
+    "BtSyncLed.h": true,
+    "RadioWifiAccessWindow.h": true,
+    "CasioWatchBattery.h": true
+  },
+  "partition_change": "Restore optional 64 KB coredump row; app/FS unchanged"
+}

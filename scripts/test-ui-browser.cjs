@@ -31,7 +31,7 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.13', station: -1, radio_active: false,
+    firmware_version: 'V4.14', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     wifi_connected:true,ap_mode:false,wifi_ip:'10.0.1.137',
     bt_day_complete: true, bt_pairing: false,
@@ -42,6 +42,7 @@ const { chromium } = require('playwright');
   let holdNextLedWrite = false, ledWriteHeld, releaseLedWrite;
   let rejectNextLedWrite = false;
   let rejectNextWatchOption = false;
+  let holdNextCrashWrite=false,crashWriteHeld,releaseCrashWrite,rejectNextCrashWrite=false;
   let holdNextHistoryWrite=false,historyWriteHeld,releaseHistoryWrite,rejectNextHistoryWrite=false;
   let holdNextAccessWrite=false,accessWriteHeld,releaseAccessWrite,rejectNextAccessWrite=false;
   let holdNextConfig = false, configHeld, releaseConfig;
@@ -63,7 +64,13 @@ const { chromium } = require('playwright');
       else if (url === '/api/config') {
         if (req.method() === 'POST') {
           const fields = Object.fromEntries([...(req.postData() || '').matchAll(/name="([^"]+)"\r\n\r\n([^\r\n]*)/g)].map(x => [x[1], x[2]]));
-          if (Object.hasOwn(fields, 'bt_history_persist')) {
+          if (Object.hasOwn(fields, 'crash_dump_enabled')) {
+            assert.deepEqual(Object.keys(fields),['crash_dump_enabled']);
+            assert.ok(fields.crash_dump_enabled==='0'||fields.crash_dump_enabled==='1');
+            if(holdNextCrashWrite){holdNextCrashWrite=false;crashWriteHeld();await new Promise(resolve=>{releaseCrashWrite=resolve})}
+            if(rejectNextCrashWrite){rejectNextCrashWrite=false;code=500;data={status:'error',message:'Crash dump preference could not be saved'}}
+            else{config.crash_dump_enabled=fields.crash_dump_enabled==='1';data={status:'ok'}}
+          } else if (Object.hasOwn(fields, 'bt_history_persist')) {
             assert.deepEqual(Object.keys(fields),['bt_history_persist']);
             if(holdNextHistoryWrite){holdNextHistoryWrite=false;historyWriteHeld();await new Promise(resolve=>{releaseHistoryWrite=resolve})}
             if(rejectNextHistoryWrite){rejectNextHistoryWrite=false;code=500;data={status:'error',message:'History preference could not be saved'}}
@@ -148,7 +155,7 @@ const { chromium } = require('playwright');
         data = { status: 'ok' };
       }
       else if (url === '/api/diagnostics') data = {
-        firmware:'V4.13',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
+        firmware:'V4.14',uptime_sec:7200,reset_reason:9,heap_max_alloc:90000,loop_stack_min_free:3000,
         heap_free:120000,heap_min_free:110000,clock_state:'Synchronized',ntp_age_sec:60,
         ntp_sync_count:12,clock_error_est_sec:0.1,ntp_interval_sec:3600,wifi_connected:status.wifi_connected,wifi_ip:status.wifi_ip,
         radio_active:status.radio_active,radio_paused:status.radio_paused||false,carrier_hz:status.carrier_hz||0,boundary_delay_us:80,boundary_delay_worst_us:100,
@@ -160,7 +167,7 @@ const { chromium } = require('playwright');
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.13');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.14');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -393,6 +400,59 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('#activityLedStatus').textContent(), 'BT sync indicator');
     assert.equal(await page.locator('#toast').textContent(), 'LED setting could not be saved');
 
+    // Crash dumps default Off and save only their own durable preference.
+    // Focused checkbox rollback and pending/late reads must keep that choice.
+    await page.evaluate(()=>showView('settings'));
+    await page.evaluate(()=>{const c=window.setCrashDumpEnabled;window.setCrashDumpEnabled=(...args)=>(window.lastCrashSave=c(...args))});
+    const crashToggle=page.getByRole('checkbox',{name:'Save crash dumps to flash',exact:true});
+    assert.equal(await crashToggle.isChecked(),false);
+    assert.equal(await crashToggle.isDisabled(),false);
+    assert.match(await page.locator('#crash-dump-settings').textContent(),/only when the ESP32 crashes/);
+    assert.match(await page.locator('#crash-dump-settings').textContent(),/Off blocks new dumps and keeps any existing dump/);
+    assert.match(await page.locator('#crash-dump-settings').textContent(),/No continuous logs are written/);
+    assert.match(await page.locator('#crashDumpHelp').textContent(),/separate from daily Bluetooth status snapshots.*no once-per-day limit/);
+    const btHistoryBeforeCrash=config.bt_history_persist;
+    holdNextStatus=true;const crashOldStatus=new Promise(resolve=>{statusHeld=resolve});
+    await page.evaluate(()=>{window.oldCrashStatus=tick()});await crashOldStatus;
+    holdNextCrashWrite=true;const crashPending=new Promise(resolve=>{crashWriteHeld=resolve});
+    await crashToggle.check();await crashPending;
+    assert.equal(await crashToggle.isChecked(),true);assert.equal(await crashToggle.isDisabled(),true);
+    assert.equal(await page.locator('#crashDumpStatus').textContent(),'Saving…');
+    await page.evaluate(async()=>{renderStatus(await api('/api/status'));await loadConfig()});
+    assert.equal(await crashToggle.isChecked(),true);assert.equal(await page.locator('#crashDumpStatus').textContent(),'Saving…');
+    releaseCrashWrite();await page.evaluate(async()=>await window.lastCrashSave);
+    releaseStatus();await page.evaluate(async()=>await window.oldCrashStatus);
+    assert.equal(config.crash_dump_enabled,true);assert.equal(await crashToggle.isChecked(),true);
+    await page.reload();await page.waitForFunction(()=>document.getElementById('crashDumpStatus').textContent==='On');
+    await page.evaluate(()=>{showView('settings');const c=window.setCrashDumpEnabled;window.setCrashDumpEnabled=(...args)=>(window.lastCrashSave=c(...args))});
+    assert.equal(await crashToggle.isChecked(),true,'crash preference survives reload');
+    rejectNextCrashWrite=true;await crashToggle.focus();await crashToggle.click();
+    await page.evaluate(async()=>await window.lastCrashSave);
+    assert.equal(await crashToggle.isChecked(),true);assert.equal(await crashToggle.isDisabled(),false);
+    assert.equal(await page.locator('#toast').textContent(),'Crash dump preference could not be saved');
+    holdNextConfig=true;const crashOldConfig=new Promise(resolve=>{configHeld=resolve});
+    await page.evaluate(()=>{window.oldCrashConfig=loadConfig()});await crashOldConfig;
+    await crashToggle.uncheck();await page.evaluate(async()=>await window.lastCrashSave);
+    releaseConfig();await page.evaluate(async()=>await window.oldCrashConfig);
+    assert.equal(config.crash_dump_enabled,false);assert.equal(await crashToggle.isChecked(),false);
+    assert.equal(await page.locator('#crashDumpStatus').textContent(),'Off');
+    assert.equal(config.bt_history_persist,btHistoryBeforeCrash,'crash preference leaves daily BT history unchanged');
+    config.crash_dump_available=false;await page.evaluate(()=>tick());
+    assert.equal(await crashToggle.isDisabled(),true);assert.equal(await page.locator('#crashDumpStatus').textContent(),'Unavailable');
+    const unsupportedCrashPosts=requests.filter(r=>r.method==='POST').length;
+    await page.evaluate(()=>setCrashDumpEnabled(true));
+    assert.equal(requests.filter(r=>r.method==='POST').length,unsupportedCrashPosts);
+    assert.match(await page.locator('#crashDumpHelp').textContent(),/unavailable with this ESP32 core\/build/);
+    config.crash_dump_available=true;await page.evaluate(()=>tick());
+    assert.equal(await crashToggle.isDisabled(),false);assert.equal(await crashToggle.isChecked(),false);
+    await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
+    await page.screenshot({path:'/tmp/radioclock-v414-crash-settings-desktop.png',fullPage:true,animations:'disabled'});
+    await page.setViewportSize({width:390,height:844});
+    await page.screenshot({path:'/tmp/radioclock-v414-crash-settings-phone.png',fullPage:true,animations:'disabled'});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'crash card keeps phone page within width');
+    assert.deepEqual(await page.locator('.navbtn').allTextContents(),['Overview','Radio','Watch (BLE)','Schedules','Network','Settings','Diagnostics','About']);
+    await page.setViewportSize({width:1440,height:1000});
+
     // Daily history saves one preference immediately and shields the focused
     // checkbox from rejected writes and late status/config responses.
     await page.evaluate(()=>showView('watch'));
@@ -423,7 +483,7 @@ const { chromium } = require('playwright');
     config.bt_history_saved_at='2026-10-09 06:30:17';config.bt_history_save_status='Saved first success today';
     await page.evaluate(()=>tick());assert.equal(await page.locator('#btHistorySavedAt').textContent(),'2026-10-09 06:30:17');
     await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
-    await page.screenshot({path:'/tmp/radioclock-v413-watch-history.png',fullPage:true,animations:'disabled'});
+    await page.screenshot({path:'/tmp/radioclock-v414-watch-history.png',fullPage:true,animations:'disabled'});
 
     // Daily access is independent of watch/LF zones and accepts midnight-crossing
     // windows. Enabling picks Power-save; disabling preserves that mode.
@@ -469,7 +529,7 @@ const { chromium } = require('playwright');
     await page.evaluate(()=>showView('settings'));
     assert.equal(await accessToggle.isChecked(),false);assert.equal(await page.locator('#wifiAccessEnd').inputValue(),'03:00');
     await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
-    await page.screenshot({path:'/tmp/radioclock-v413-settings.png',fullPage:true,animations:'disabled'});
+    await page.screenshot({path:'/tmp/radioclock-v414-settings.png',fullPage:true,animations:'disabled'});
 
     // State colors are derived from active RF sessions and AP precedence, in
     // both saved UI themes. An RF zero-carrier envelope remains green.
@@ -490,16 +550,16 @@ const { chromium } = require('playwright');
     await page.evaluate(()=>document.documentElement.dataset.theme='dark');
     Object.assign(status,{radio_active:true,station:0,tx_time:'2026-10-07 12:00:00',bt_time:'2026-10-07 13:00:00',carrier_hz:40000,ap_mode:false,wifi_connected:true,radio_paused:false,bt_last_sync_status:'Watch 1: time write delivered'});await page.evaluate(async()=>{await tick();await updateDiagnostics(true)});
     await page.evaluate(()=>{window.scrollTo({top:0,left:0,behavior:'instant'});document.getElementById('toast').classList.remove('show')});
-    await page.screenshot({path:'/tmp/radioclock-v413-overview-active.png',fullPage:true,animations:'disabled'});
+    await page.screenshot({path:'/tmp/radioclock-v414-overview-active.png',fullPage:true,animations:'disabled'});
     await page.evaluate(()=>document.documentElement.dataset.theme='light');
-    await page.screenshot({path:'/tmp/radioclock-v413-overview-light.png',fullPage:true,animations:'disabled'});
+    await page.screenshot({path:'/tmp/radioclock-v414-overview-light.png',fullPage:true,animations:'disabled'});
     await page.setViewportSize({width:390,height:844});
     await page.evaluate(()=>{document.documentElement.dataset.theme='dark';showView('settings');window.scrollTo({top:0,left:0,behavior:'instant'})});
-    await page.screenshot({path:'/tmp/radioclock-v413-settings-phone.png',fullPage:true,animations:'disabled'});
+    await page.screenshot({path:'/tmp/radioclock-v414-settings-phone.png',fullPage:true,animations:'disabled'});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'new controls must not overflow phone width');
     assert.deepEqual(await page.locator('.navbtn').allTextContents(),['Overview','Radio','Watch (BLE)','Schedules','Network','Settings','Diagnostics','About']);
     await page.evaluate(()=>{showView('watch');window.scrollTo({top:0,left:0,behavior:'instant'})});
-    await page.screenshot({path:'/tmp/radioclock-v413-watch-phone.png',fullPage:true,animations:'disabled'});
+    await page.screenshot({path:'/tmp/radioclock-v414-watch-phone.png',fullPage:true,animations:'disabled'});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
     await page.setViewportSize({width:1440,height:1000});
     Object.assign(status,{radio_active:false,station:-1,ap_mode:false,carrier_hz:0,bt_last_sync_status:'GW-BX5600 MIP - sync attempt failed'});await page.evaluate(()=>tick());
@@ -592,7 +652,7 @@ const { chromium } = require('playwright');
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:'/tmp/radioclock-v49-diagnostics.png',fullPage:true});
     assert.deepEqual(pageErrors, []);
-    console.log('V4.13 browser regressions passed: daily history autosave/persistence/rollback/pending and stale reads, overnight Wi-Fi group/drafts/power override, green/red RF/AP states in dark/light, phone/sidebar screenshots; existing: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
+    console.log('V4.14 browser regressions passed: crash toggle opt-in/only-own-setting/persistence/pending/stale-read/rollback/unsupported-core;  daily history autosave/persistence/rollback/pending and stale reads, overnight Wi-Fi group/drafts/power override, green/red RF/AP states in dark/light, phone/sidebar screenshots; existing: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

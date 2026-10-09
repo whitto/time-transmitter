@@ -20,10 +20,12 @@ fi
 # The sketch-local partitions.csv selects the 3 MB app / 4 MB flash layout.
 fqbn="${RADIOCLOCK_FQBN:-esp32:esp32:esp32:FlashSize=4M,PartitionScheme=huge_app}"
 jobs="${RADIOCLOCK_BUILD_JOBS:-2}"
-sketch="$repo_dir/firmware/RadioClock_V4_13"
-build_dir="$tools_dir/build/RadioClock_V4_13"
-output_dir="$tools_dir/output/RadioClock_V4_13"
+sketch="$repo_dir/firmware/RadioClock_V4_14"
+build_dir="$tools_dir/build/RadioClock_V4_14"
+output_dir="$tools_dir/output/RadioClock_V4_14"
 mkdir -p "$build_dir" "$output_dir"
+bash "$repo_dir/scripts/install-local-library.sh"
 
-exec "$cli" compile --fqbn "$fqbn" --jobs "$jobs" \
+"$cli" compile --fqbn "$fqbn" --jobs "$jobs" \
   --build-path "$build_dir" --output-dir "$output_dir" "$sketch" "$@"
+python3 "$repo_dir/scripts/validate-crash-gate-elf.py" "$output_dir/RadioClock_V4_14.ino.elf"

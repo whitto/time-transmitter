@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_13/RadioClock_V4_13.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
 
 
 def balanced_block(source, start):
@@ -289,6 +289,12 @@ char ssid[64] = "test", passwd[64] = "";
 String timezone_name(DEFAULT_TZ_NAME);
 int full_time_station = SN_JJY_E, transmission_offset_minutes = 0, wifiPowerMode = 0;
 bool wifiAccessEnabled = false;
+bool crashDumpEnabled = false;
+namespace RadioCrashDumpGate {
+bool gateEnabled = false, gateAvailable = true;
+void setEnabled(bool value) { gateEnabled = value; }
+bool available() { return gateAvailable; }
+}
 int wifiAccessStart = 1080, wifiAccessEnd = 1200;
 String wifiAccessTimezone("Australia/Brisbane");
 constexpr const char *DEFAULT_BT_TIMEZONE = "Australia/Brisbane";
@@ -735,10 +741,11 @@ class BluetoothWorkflowTest(unittest.TestCase):
         font_branch = balanced_block(source, source.index('if (server.hasArg("bt_font_profile") ||'))
         power_branch = balanced_block(source, source.index('if (server.hasArg("bt_idle_power_save"))'))
         history_branch = balanced_block(source, source.index('if (server.hasArg("bt_history_persist"))'))
+        crash_branch = balanced_block(source, source.index('if (server.hasArg("crash_dump_enabled"))'))
         wifi_branch = balanced_block(source, source.index('if (server.hasArg("wifi_access_enabled") ||'))
         routes = ('void registerRoutes() {\n' + routes +
                   '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + protocol_branch + '\n});' +
-                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + history_branch + wifi_branch + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
+                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + crash_branch + history_branch + wifi_branch + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
         # Forward declaration precedes initBluetoothSync, which creates this callback class.
         functions = functions.replace('void initBluetoothSync(void) {', scan + '\n\nvoid initBluetoothSync(void) {', 1)
         return '\n'.join([MOCKS, source[globals_start:globals_end], HELPERS, functions, routes, DRIVER])

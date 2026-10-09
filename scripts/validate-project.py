@@ -8,13 +8,13 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-sketch = root / "firmware/RadioClock_V4_13"
+sketch = root / "firmware/RadioClock_V4_14"
 source = (sketch / f"{sketch.name}.ino").read_text()
 html = (root / "ui/radioclock.html").read_text()
 assert f"// {sketch.name}.ino" in source
-assert '#define FIRMWARE_VERSION "V4.13"' in source
-assert '// Firmware Version: V4.13' in source
-assert "V4.13" in html and "V3.2.2" not in html
+assert '#define FIRMWARE_VERSION "V4.14"' in source
+assert '// Firmware Version: V4.14' in source
+assert "V4.14" in html and "V3.2.2" not in html
 assert 'id="btTime"' in html and 'id="btTimezone"' in html and 'id="btTimeOffset"' in html
 for required in ('bt_timezone', 'bt_time_offset_minutes', 'bluetoothLocalTime'):
     assert required in source, f"Bluetooth time setting missing: {required}"
@@ -56,6 +56,7 @@ for previous, current in zip(parts, parts[1:]):
     assert previous[2]+previous[3] <= current[2], "Partitions overlap"
 assert max(offset+size for _,_,offset,size in parts) <= 4*1024*1024
 assert any(kind == "app" and size == 3*1024*1024 for _,kind,_,size in parts)
-assert not any(name == "coredump" for name,_,_,_ in parts), "Crash logs must not be retained in flash"
+assert any(name == "coredump" and size == 64*1024 for name,_,_,size in parts)
+assert '#include <RadioCrashDumpGate.h>' in source, "Crash-dump toggle requires its panic gate"
 print(f"PASS: gzip round-trip ({len(compressed):,} bytes), JavaScript syntax, "
-      f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.13 versions, 4 MB partitions")
+      f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.14 versions, 4 MB partitions")

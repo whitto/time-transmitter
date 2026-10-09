@@ -43,6 +43,7 @@ fi
 "$cli" core update-index --additional-urls "$esp32_index"
 "$cli" core install esp32:esp32@3.3.12 --additional-urls "$esp32_index"
 "$cli" lib install 'NimBLE-Arduino@2.5.1' 'ArduinoJson@6.21.5'
+bash "$(dirname -- "${BASH_SOURCE[0]}")/install-local-library.sh"
 "$cli" version
 "$cli" core list
 "$cli" lib list
