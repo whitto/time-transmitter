@@ -18,11 +18,11 @@ except ImportError:
     import test_bluetooth_workflow as workflow
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
 
 EXTRAS = r'''
-#define FIRMWARE_VERSION "V4.14"
-#define FIRMWARE_BUILD "R2"
+#define FIRMWARE_VERSION "V4.15"
+#define FIRMWARE_BUILD "R1"
 constexpr int MAX_SCHEDULES=24, SN_DCF77=3, SN_MSF=4;
 constexpr int HTTP_GET=0;
 std::atomic<int> last_station{0};
@@ -69,6 +69,7 @@ struct ServerMock {
   char response[8192]={};
   bool hasArg(const char* key)const{return args.count(key);}
   String arg(const char* key)const{auto i=args.find(key);return i==args.end()?String():i->second;}
+  bool checkedArg(const char* key,String& result)const{auto i=args.find(key);if(i==args.end())return false;result=i->second;return result.length()==i->second.length();}
   void setContentLength(size_t length){contentLength=length;}
   void send(int status,const char*,const String& data){code=status;used=data.length();assert(used<sizeof(response));std::memcpy(response,data.c_str(),used+1);}
   void sendContent(const char* data,size_t length){assert(used+length<sizeof(response));std::memcpy(response+used,data,length);used+=length;response[used]=0;assert(used==contentLength);}
@@ -90,6 +91,8 @@ int main(){
     btBatteryReadings[i].sampledUtc=fakeEpoch-5;strlcpy(btBatteryReadings[i].address,address,18);
     btBatteryStatuses[i]="Battery: read \"OK\"\n é 🕒";
     btSyncTimes[i]=30+360*i;btSyncEnabled[i]=i%2==0;btSyncProtocol[i]=i%3;btSyncProfile[i]=i;
+    assert(btRecentSyncs.bind(i,address,btProfileProtocol[i]));
+    for(int j=0;j<5;++j) assert(btRecentSyncs.record(i,address,btProfileProtocol[i],static_cast<uint32_t>(fakeEpoch+j),j%2==0));
   }
   btProfileName[3]="Watch \"four\"\\\n\t\r\b\f\x01\x1f é 🕒";
   std::memset(ssid,'\x02',63);ssid[63]=0;
@@ -144,6 +147,43 @@ int main(){
 '''
 
 class ApiReliabilityTest(unittest.TestCase):
+    def test_actual_ssid_admission_preserves_prior_credentials(self):
+        source=FIRMWARE.read_text()
+        start=source.index('    const bool ssidRequested=server.hasArg("ssid");',source.index('server.on("/api/config", HTTP_POST'))
+        end=source.index('    if (server.hasArg("timezone")) {',start)
+        admission=source[start:end]
+        driver=r'''
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <string>
+size_t strlcpy(char* to,const char* from,size_t count){if(count){std::strncpy(to,from,count-1);to[count-1]=0;}return std::strlen(from);}
+struct String{std::string s;String(const char* p=""):s(p){}String(std::string p):s(std::move(p)){}size_t length()const{return s.size();}const char* c_str()const{return s.c_str();}
+int indexOf(const char* p)const{auto n=s.find(p);return n==s.npos?-1:int(n);}void toCharArray(char* out,size_t size)const{strlcpy(out,c_str(),size);}friend bool operator!=(const String&a,const String&b){return a.s!=b.s;}};
+struct ServerMock{String value,password;int code=200;bool passwordRequested=false,failSsidCopy=false,failPasswordCopy=false;
+bool hasArg(const char* key){return !strcmp(key,"ssid") || passwordRequested;}
+bool checkedArg(const char* key,String& out){bool isSsid=!strcmp(key,"ssid");if(isSsid?failSsidCopy:failPasswordCopy)return false;out=isSsid?value:password;return true;}
+void send(int n,const char*,const char*){code=n;}}server;
+char ssid[64]="previous-network",passwd[64]="previous-password";bool wifiChanged=false;
+void handleSsid(){ADMISSION}
+void reset(const std::string& value){server.value=String(value);server.code=200;wifiChanged=false;server.passwordRequested=false;server.failSsidCopy=false;server.failPasswordCopy=false;strlcpy(ssid,"previous-network",sizeof(ssid));strlcpy(passwd,"previous-password",sizeof(passwd));}
+int main(){for(const std::string& value:{std::string(32,'x'),std::string("éééééééééééééééé"),std::string("😀😀😀😀😀😀😀😀")}){reset(value);handleSsid();assert(server.code==200&&wifiChanged&&std::string(ssid)==value);}
+for(const std::string& value:{std::string(33,'x'),std::string("ééééééééééééééééé"),std::string("😀😀😀😀😀😀😀😀x"),std::string("a\0b",3),std::string("a\nb"),std::string("a\rb")}){reset(value);handleSsid();assert(server.code==400&&!wifiChanged&&std::string(ssid)=="previous-network");}
+reset("new-network");server.failSsidCopy=true;handleSsid();assert(server.code==503&&!wifiChanged&&std::string(ssid)=="previous-network");
+reset("new-network");server.passwordRequested=true;server.failPasswordCopy=true;handleSsid();assert(server.code==503&&!wifiChanged&&std::string(ssid)=="previous-network"&&std::string(passwd)=="previous-password");
+reset("new-network");server.passwordRequested=true;server.password=String(std::string(64,'x'));handleSsid();assert(server.code==400&&!wifiChanged&&std::string(ssid)=="previous-network"&&std::string(passwd)=="previous-password");
+reset("new-network");server.passwordRequested=true;server.password=String("new-password");handleSsid();assert(server.code==200&&wifiChanged&&std::string(ssid)=="new-network"&&std::string(passwd)=="new-password");
+std::puts("Actual API SSID UTF-8 byte limits preserve prior credentials PASS");}
+'''.replace('ADMISSION',admission)
+        with tempfile.TemporaryDirectory(prefix='radioclock-ssid-admission-') as tmp:
+            src,binary=Path(tmp)/'ssid.cpp',Path(tmp)/'ssid'
+            src.write_text(driver)
+            subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',
+                '-fno-omit-frame-pointer','-no-pie','-O1',str(src),'-o',str(binary)],check=True)
+            result=subprocess.run([str(binary)],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('preserve prior credentials PASS',result.stdout)
+
     def test_actual_get_routes_parse_and_stress(self):
         source=FIRMWARE.read_text()
         unit=workflow.BluetoothWorkflowTest().unit_source(source)
@@ -163,7 +203,7 @@ class ApiReliabilityTest(unittest.TestCase):
         mocks=mocks.replace('friend bool operator==(const String& a, const String& b)',
             'friend bool operator==(const String& a,const char* b){return a.s==b;}\n  friend bool operator==(const String& a, const String& b)')
         mocks=mocks.replace('#include <algorithm>','#include <algorithm>\n#include <new>\n#include <cstddef>')
-        helper='\n'.join(workflow.extract_function(source,name) for name in ['appendBluetoothProfiles','appendCommonSettings'])
+        helper='\n'.join(workflow.extract_function(source,name) for name in ['appendBluetoothProfiles','appendRecentBluetoothSyncs','appendCommonSettings'])
         routes=[]
         for path in ['/api/config','/api/status','/api/stations','/api/schedules']:
             start=source.index(f'server.on("{path}", HTTP_GET, []() {{')
@@ -202,8 +242,14 @@ class ApiReliabilityTest(unittest.TestCase):
         self.assertFalse(config['crash_dump_enabled']);self.assertTrue(config['crash_dump_available'])
         self.assertTrue(config['filesystem_available']);self.assertFalse(config['config_storage_fault'])
         self.assertEqual(config['ssid'],'\x02'*63)
-        self.assertEqual(config['firmware_version'],'V4.14')
-        self.assertEqual(config['firmware_build'],'R2')
+        self.assertEqual(config['firmware_version'],'V4.15')
+        self.assertEqual(config['firmware_build'],'R1')
+        self.assertEqual(config['bt_recent_sync_profile'],0)
+        recent=config['bt_recent_syncs']
+        self.assertEqual(len(recent),4)
+        self.assertEqual([row['successful'] for row in recent],[True,False,True,False])
+        self.assertTrue(all(row['protocol']==0 and row['date'] for row in recent))
+        self.assertTrue(all(recent[i]['utc_epoch']>recent[i+1]['utc_epoch'] for i in range(3)))
         self.assertEqual(config['bt_last_sync_status'],'Time delivered "ack"\\\n\t\r\b\f\x01\x1f é 🕒')
         self.assertEqual(config['bt_last_sync_date'],'2024-01-01 22:00:00')
         self.assertEqual(config['bt_history_saved_at'],'2024-01-01 22:00:00')

@@ -236,7 +236,10 @@ int main() {
   // An older saved config with no appended access fields restores safe
   // disabled defaults rather than retaining stale RAM window values.
   std::string legacy=flash.at(CONFIG_FILE);
-  for (int field=0;field<4;++field) {
+  legacy.erase(0,legacy.find('\n')+1);
+  legacy.erase(legacy.rfind("CRC32:"));
+  // Crash preference plus the four access fields were absent in V4.12.
+  for (int field=0;field<5;++field) {
     assert(!legacy.empty() && legacy.back()=='\n'); legacy.pop_back();
     const auto boundary=legacy.rfind('\n'); assert(boundary!=std::string::npos);
     legacy.resize(boundary+1);

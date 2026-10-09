@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
 
 
 def balanced_block(source, start):
@@ -95,6 +95,7 @@ MOCKS = r'''
 #include "RadioBleArbiter.h"
 #include "CasioWatchBattery.h"
 #include "BtSyncHistory.h"
+#include "BtRecentSyncs.h"
 #include "RadioWifiAccessWindow.h"
 #include "RadioConfigWriter.h"
 #include "RadioJsonWriter.h"
@@ -115,7 +116,7 @@ public:
   String(unsigned long n) : s(std::to_string(n)) {}
   size_t length() const { return s.length(); }
   const char* c_str() const { return s.c_str(); }
-  void reserve(size_t n) { s.reserve(n); }
+  bool reserve(size_t n) { s.reserve(n); return true; }
   void trim() {
     auto first = s.find_first_not_of(" \t\r\n");
     s = first == std::string::npos ? "" : s.substr(first, s.find_last_not_of(" \t\r\n") - first + 1);
@@ -247,6 +248,12 @@ void ble_npl_event_deinit(ble_npl_event* e) {
 }
 bool full_time_tx = false, trustedClock = true;
 bool clockTrusted() { return trustedClock; }
+int safeRestarts = 0;
+extern RadioBleArbiter radioBleArbiter;
+void applicationForceSafeRestart() {
+  ++safeRestarts;
+  assert(radioBleArbiter.bleOwned() && !radioBleArbiter.rfOwned());
+}
 struct Schedule { int start_min, end_min; } schedules[4]{};
 int schedule_count = 0, radioRefreshes = 0;
 void radioRequestRefresh() { ++radioRefreshes; }
@@ -258,6 +265,13 @@ struct ServerMock {
   String response;
   bool hasArg(const char* key) const { return args.count(key); }
   String arg(const char* key) const { auto i = args.find(key); return i == args.end() ? String() : i->second; }
+  bool checkedArg(const char* key, String& value) const {
+    auto i = args.find(key);
+    if (i == args.end()) return false;
+    if (!value.reserve(i->second.length())) return false;
+    value = i->second;
+    return value.length() == i->second.length();
+  }
   size_t contentLength = 0;
   void setContentLength(size_t n) { contentLength = n; }
   void sendContent(const char* data, size_t n) { response.s.append(data,n); assert(response.length()==contentLength); }
@@ -301,7 +315,7 @@ struct LittleFsMock {
   bool rename(const char* from, const char* to) { flash[to] = flash.at(from); flash.erase(from); return true; }
 } LittleFS;
 constexpr const char *CONFIG_FILE = "config", *CONFIG_TEMP_FILE = "config.tmp", *DEFAULT_TZ_NAME = "Australia/Brisbane";
-constexpr int SN_JJY_E = 0, SN_BPC = 5, WIFI_POWER_ALWAYS_ON = 0, WIFI_POWER_SCHEDULED = 1;
+constexpr int SN_JJY_E = 0, SN_BPC = 6, WIFI_POWER_ALWAYS_ON = 0, WIFI_POWER_SCHEDULED = 1;
 char ssid[64] = "test", passwd[64] = "";
 String timezone_name(DEFAULT_TZ_NAME);
 int full_time_station = SN_JJY_E, transmission_offset_minutes = 0, wifiPowerMode = 0;
@@ -335,6 +349,9 @@ static int btDeferredSlot = -1;
 static unsigned long btShutdownRetryMillis = 0;
 static bool btInitFailed = false;
 static RadioBleScanControl btScanControl;
+static bool btShutdownRecoveryActive = false;
+static uint32_t btShutdownRecoveryStartedMillis = 0;
+static constexpr uint32_t BT_SHUTDOWN_RECOVERY_DEADLINE_MS = 60000;
 bool mockQuiescent = true, writeResult = true, preemptWrite = false;
 static bool serviceBtClientQuarantine() { return !btBleBusy || mockQuiescent; }
 int disconnects = 0, barriersReleased = 0, writes = 0, lastWriteProtocol = -1;
@@ -357,6 +374,8 @@ bool performCasioStandardTimeSync(int p) {
   return writeResult;
 }
 void initBluetoothSync();
+static bool serviceBtShutdownProgress();
+static void completeBtShutdownProgress();
 static bool bluetoothScanMayStart();
 static bool bluetoothControllerNeeded();
 static bool shutdownIdleBluetooth();
@@ -393,6 +412,66 @@ int main(int argc, char** argv) {
   setenv("TZ", "UTC0", 1); tzset();
   std::fill(std::begin(btSyncEnabled), std::end(btSyncEnabled), false);
   btAlwaysWaitEnabled = false;
+  if (argc > 1 && std::strcmp(argv[1], "shutdown-deadlines") == 0) {
+    // There is deliberately no client: a stalled host-queue stop must not
+    // evade recovery by returning to a healthy loop heartbeat indefinitely.
+    bind(); initBluetoothSync(); btAlwaysWaitEnabled = true;
+    serviceBluetoothSync(); assert(mockScan.scanning && btClient == nullptr);
+    allowHostProgress = false;
+    assert(!radioBleArbiter.requestRf());
+    serviceBluetoothSync(); assert(btShutdownRecoveryActive && hostEvents.size() == 1);
+    auto* retained = hostEvents.front();
+    const auto submissions = submittedScanEvents.size();
+    const auto started = btShutdownRecoveryStartedMillis;
+    for (int retry = 0; retry < 30 && !safeRestarts; ++retry) {
+      tick += 1001;
+      serviceBluetoothSync();
+      assert(btShutdownRecoveryStartedMillis == started);
+      assert(hostEvents.size() == 1 && hostEvents.front() == retained);
+      assert(submittedScanEvents.size() == submissions);
+      assert(radioBleArbiter.bleOwned() && !radioBleArbiter.rfOwned());
+      assert(NimBLEDevice::deinits == 0 && scanEventReleases == 0);
+    }
+    assert(safeRestarts == 1 && static_cast<uint32_t>(tick - started) >= 60000);
+    // A real restart does not return. This fixture does, allowing explicit
+    // verification that no event was freed or RF ownership released first.
+    allowHostProgress = true; tick += 1001;
+    // Do not continue the expired instance; safe recovery means a reboot.
+    std::puts("No-client scan host stall reaches one retained shutdown deadline with RF gated");
+    return 0;
+  }
+  if (argc > 1 && (std::strcmp(argv[1], "controller-deadline") == 0 ||
+                   std::strcmp(argv[1], "idle-controller-deadline") == 0 ||
+                   std::strcmp(argv[1], "partial-controller-deadline") == 0)) {
+    const bool idle = std::strcmp(argv[1], "idle-controller-deadline") == 0;
+    const bool partial = std::strcmp(argv[1], "partial-controller-deadline") == 0;
+    if (partial) { NimBLEDevice::initOk = false; NimBLEDevice::controllerStops = false; }
+    initBluetoothSync();
+    if (idle) { btIdlePowerSaveEnabled = true; }
+    else assert(!radioBleArbiter.requestRf());
+    NimBLEDevice::deinitOk = false;
+    serviceBluetoothSync(); assert(btShutdownRecoveryActive && btClient == nullptr);
+    if (idle) btAlwaysWaitEnabled = true; // New work must not reset interrupted teardown.
+    const auto started = btShutdownRecoveryStartedMillis;
+    for (int retry = 0; retry < 70 && !safeRestarts; ++retry) {
+      tick += 1001; serviceBluetoothSync();
+      assert(btShutdownRecoveryStartedMillis == started);
+      assert(radioBleArbiter.bleOwned() && !radioBleArbiter.rfOwned());
+    }
+    assert(safeRestarts == 1 && static_cast<uint32_t>(tick - started) >= 60000);
+    std::puts("Repeated full/partial/idle controller shutdown errors reach the same bounded deadline");
+    return 0;
+  }
+  if (argc > 1 && std::strcmp(argv[1], "shutdown-rollover") == 0) {
+    initBluetoothSync();
+    tick = UINT32_MAX - 100;
+    assert(serviceBtShutdownProgress());
+    tick += 59999; assert(serviceBtShutdownProgress() && !safeRestarts);
+    tick += 1; assert(!serviceBtShutdownProgress() && safeRestarts == 1);
+    assert(radioBleArbiter.bleOwned() && !radioBleArbiter.requestRf());
+    std::puts("Common shutdown deadline remains bounded across millis rollover");
+    return 0;
+  }
   if (argc > 1 && std::strcmp(argv[1], "midnight") == 0) {
     bind(); initBluetoothSync(); btSyncEnabled[0] = true; btSyncTimes[0] = 0;
     fakeEpoch = 1735653480; // Brisbane 2024-12-31 23:58: New Year's target is 2025-01-01.
@@ -745,13 +824,15 @@ class BluetoothWorkflowTest(unittest.TestCase):
         scan = balanced_block(source, scan_start) + ';'
         names = ['btWatchNameMatches', 'clearBtDiscovery', 'consumeBtDiscovery',
                  'cancelBtResponse', 'radioScheduleActiveNow', 'bluetoothActivityPresent',
-                 'bluetoothScanMayStart', 'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
+                 'bluetoothScanMayStart', 'serviceBtShutdownProgress', 'completeBtShutdownProgress',
+                 'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
                  'bluetoothControllerNeeded', 'shutdownIdleBluetooth',
                  'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'commitBluetoothBattery', 'attemptBluetoothSync', 'serviceBluetoothSync',
                  'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothStateText', 'sendBoundedJson', 'btWeekday', 'btNthSunday',
                  'btLastSunday', 'btDayOfYear', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
-                 'configFileLayoutValid', 'loadConfig', 'captureLegacyBluetoothHistory', 'clearBluetoothRuntimeHistory',
+                 'configTimezoneName', 'configDateValid', 'validateSavedConfig', 'configFileLayoutValid',
+                 'configStringsAvailable', 'configDefaults', 'loadConfig', 'captureLegacyBluetoothHistory', 'clearBluetoothRuntimeHistory',
                  'loadBluetoothHistory', 'saveBluetoothHistoryNow', 'tempFileMatches', 'configSaveFailed',
                  'writeConfigNow', 'saveConfig']
         functions = 'static char apiResponseBuffer[8192];\n' + '\n\n'.join(extract_function(source, n) for n in names)
@@ -784,6 +865,80 @@ class BluetoothWorkflowTest(unittest.TestCase):
             subprocess.run([str(binary)], check=True)
             subprocess.run([str(binary), 'partial-init'], check=True)
             subprocess.run([str(binary), 'midnight'], check=True)
+            for fault in ('shutdown-deadlines', 'controller-deadline',
+                          'idle-controller-deadline', 'partial-controller-deadline', 'shutdown-rollover'):
+                subprocess.run([str(binary), fault], check=True)
+
+    def test_final_time_rechecks_trust_after_battery_font_connect_and_sample(self):
+        # The captured BX packets and actual transaction functions are shared
+        # with the established font fixture. Inject lost trust at each phase;
+        # protocol data is not replaced by a second transaction implementation.
+        import test_watch_options as options
+        source = FIRMWARE.read_text()
+        capture_source = (ROOT / 'tests/test_bx_protocol.cpp').read_text()
+        captures = []
+        for name in ('settingsReply', 'dstReply', 'namesReply'):
+            block = re.search(r'static const Bytes ' + name + r' = hex\((.*?)\);',
+                              capture_source, re.S).group(1)
+            data = bytes.fromhex(''.join(re.findall(r'"([0-9a-f]+)"', block)))
+            captures.append('const std::vector<uint8_t> ' + name + '={' +
+                            ','.join(map(str, data)) + '};')
+        mocks = options.FONT_MOCKS.replace('bool trustedClock=true;', '''
+bool trustedClock=true, loseDuringBattery=false, loseDuringFont=false;
+bool loseDuringSample=false, loseAtConnect=false;
+constexpr int BT_PROTOCOL_STANDARD=1, BT_PROTOCOL_ANALOGUE=2;
+const char* btProtocolName(int) { return "native fixture"; }
+''')
+        mocks = mocks.replace('bool readBluetoothWatchBattery() { return false; }',
+                              'bool readBluetoothWatchBattery() { if(loseDuringBattery)trustedClock=false; return false; }')
+        mocks = mocks.replace("order.push_back('C'); sampledEpoch=",
+                              "if(loseDuringSample) { trustedClock=false; } order.push_back('C'); sampledEpoch=")
+        mocks = mocks.replace('std::copy(data,data+size,hardware.begin());',
+                              'std::copy(data,data+size,hardware.begin()); if(loseDuringFont)trustedClock=false;')
+        mocks = mocks.replace('assert(data[0]==0x09 && size==11);',
+                              'assert(data[0]==0x09 && (size==11 || size==10));')
+        mocks = mocks.replace('bool connectGShock(int p) { assert(p==0); return true; }',
+                              'bool connectGShock(int p) { assert(p>=0 && p<=2); if(loseAtConnect)trustedClock=false; return true; }')
+        body = '\n'.join(extract_function(source, name) for name in
+                         ('requestBluetoothBasicSettings', 'applyBluetoothWatchFont',
+                          'performGShockBX5600Sync', 'performCasioStandardTimeSync'))
+        driver = r'''
+int main() {
+  for(int phase=0; phase<3; ++phase) {
+    reset(); trustedClock=true;
+    loseDuringBattery=phase==0; loseDuringFont=phase==1; loseDuringSample=phase==2;
+    if(phase==1)btFontMode[0]=1;
+    btTransactionActive=true; btTransactionStartedMillis=0;
+    assert(!performGShockBX5600Sync() && timeWrites==0 && disconnects==1);
+    assert(!clockTrusted() && btTransactionCancelled());
+    assert(!sampledEpoch || phase==2); // No sample after early trust loss.
+  }
+  loseDuringBattery=loseDuringFont=loseDuringSample=false;
+  for(int protocol:{BT_PROTOCOL_STANDARD,BT_PROTOCOL_ANALOGUE}) {
+    reset(); trustedClock=true; loseAtConnect=true;
+    assert(!performCasioStandardTimeSync(protocol) && !sampledEpoch && timeWrites==0 && disconnects==1);
+    reset(); trustedClock=true; loseAtConnect=false; loseDuringSample=true;
+    assert(!performCasioStandardTimeSync(protocol) && timeWrites==0 && disconnects==1);
+    reset(); trustedClock=true; loseDuringSample=false;
+    assert(performCasioStandardTimeSync(protocol) && timeWrites==1 && disconnects==1);
+  }
+  // The host preemption monitor uses this exact predicate to request normal
+  // GAP termination. Restoring confidence clears cancellation without freeing
+  // any stack-backed ATT callback; production waits for normal ATT/GAP unwind.
+  trustedClock=false; assert(btTransactionCancelled());
+  trustedClock=true; assert(!btTransactionCancelled());
+  std::puts("Actual BX/standard TIME is withheld after lost clock trust; normal disconnect unwinds all paths");
+}
+'''
+        unit_source = (MOCKS.split('struct SerialMock')[0] + '\n#include <sys/time.h>\n' +
+                       '\n'.join(captures) + mocks + transaction_deadline_source(source) + body + driver)
+        with tempfile.TemporaryDirectory(prefix='radioclock-final-trust-test-') as tmp:
+            unit, binary = Path(tmp) / 'test.cpp', Path(tmp) / 'test'
+            unit.write_text(unit_source)
+            subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                            '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                            '-I', str(FIRMWARE.parent), str(unit), '-o', str(binary)], check=True)
+            subprocess.run([str(binary)], check=True)
 
 
 if __name__ == '__main__':

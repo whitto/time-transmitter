@@ -5,7 +5,7 @@ import gzip
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-SKETCH = ROOT / "firmware/RadioClock_V4_14/RadioClock_V4_14.ino"
+SKETCH = ROOT / "firmware/RadioClock_V4_15/RadioClock_V4_15.ino"
 html = (ROOT / "ui/radioclock.html").read_bytes()
 compressed = gzip.compress(html, compresslevel=9, mtime=0)
 rows = ["  " + ", ".join(f"0x{x:02x}" for x in compressed[i:i+20]) + ","
@@ -18,4 +18,4 @@ if count != 1:
 if source != SKETCH.read_text():
     SKETCH.write_text(source)
 assert gzip.decompress(compressed) == html
-print(f"V4.14 UI: {len(html):,} bytes -> {len(compressed):,} bytes gzip")
+print(f"V4.15 UI: {len(html):,} bytes -> {len(compressed):,} bytes gzip")

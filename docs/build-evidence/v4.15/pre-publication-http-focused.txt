@@ -1,0 +1,11 @@
+test_browser_ssid_utf8_admission (tests.test_http_bounds.HttpBoundsTest.test_browser_ssid_utf8_admission) ... ok
+test_response_partial_send_budget (tests.test_http_bounds.HttpBoundsTest.test_response_partial_send_budget) ... ok
+test_shipped_parser_faults (tests.test_http_bounds.HttpBoundsTest.test_shipped_parser_faults) ... ok
+test_unique_dependency_manifest (tests.test_http_bounds.HttpBoundsTest.test_unique_dependency_manifest) ... PASS: RadioBoundedWebServer 3.3.12-radioclock.1, 28 verified source/metadata files
+ok
+test_actual_ssid_admission_preserves_prior_credentials (tests.test_api_reliability.ApiReliabilityTest.test_actual_ssid_admission_preserves_prior_credentials) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 4.056s
+
+OK

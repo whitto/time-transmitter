@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-HEADER = ROOT / 'firmware/RadioClock_V4_14'
+HEADER = ROOT / 'firmware/RadioClock_V4_15'
 CPP = r'''
 #include "RadioJsonWriter.h"
 #include <cassert>

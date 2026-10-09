@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
 
 
 def extract_function(source, name):
@@ -261,6 +261,8 @@ struct NimBLEDevice {
 int NimBLEDevice::allocations = 0;
 uint16_t NimBLEDevice::preferredMtu = 0;
 bool btBleBusy = false, btBleInitialized = true, rfDemand = false, allowHostProgress = true;
+bool trustedClock = true;
+bool clockTrusted() { return trustedClock; }
 std::function<void()> nextDelayHook;
 String btLastWatchAddress("aa:bb:cc:dd:ee:ff");
 uint8_t btLastWatchAddressType = 0;
@@ -413,6 +415,17 @@ int main() {
   rfDemand = false;
   dataChar.onWrite = {};
   disconnectGShock();
+  assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
+  // Confidence lost while loopTask is blocked in an actual stack-backed ATT
+  // helper follows the host-monitor GAP cancellation path. The task's callback
+  // must complete before writeBt() returns; there is no local wait timeout.
+  holdGattUntilDisconnect = true;
+  dataChar.onWrite = [] { trustedClock = false; };
+  started = tick;
+  assert(!writeBt(btSpData,payload,sizeof(payload),true));
+  assert(!pendingGattCallback && btClientQuiescent() && tick-started < 100);
+  disconnectGShock();
+  trustedClock = true; holdGattUntilDisconnect = false; dataChar.onWrite = {};
   assert(connectGShock(BT_PROTOCOL_BX5600_MIP));
   // A too-large complete response must never be echoed as a truncated prefix.
   requestChar.onWrite = [] {

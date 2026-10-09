@@ -71,7 +71,58 @@ struct RadioProgressPolicy {
   static constexpr uint64_t LoopRestartUs = 70000000;
   static constexpr uint64_t RetrySpacingUs = 5000000;
   static constexpr uint32_t MaximumTimerRetries = 3;
+  static constexpr uint64_t TimerHealthyReplenishUs = 1800000000ULL;
+  // Allow a normal bounded BLE transaction between loop observations. A gap
+  // beyond the independent loop deadline cannot prove continuous health.
+  static constexpr uint64_t MaximumHealthyObservationGapUs = LoopRestartUs;
+  static constexpr uint32_t MinimumHealthyTimerTicks =
+      static_cast<uint32_t>(TimerHealthyReplenishUs / 2000ULL);
   static bool elapsed(uint64_t nowUs, uint64_t lastUs, uint64_t limitUs) {
     return nowUs >= lastUs && nowUs - lastUs > limitUs;
   }
+};
+
+// Only loopTask accesses this fixed-size RAM state. Timer recovery is limited
+// to three attempts until 30 minutes of verified healthy operation replenish
+// the budget. A fault, stale heartbeat or long observation gap breaks health;
+// wall time passing while RF is latched off can never unlock further retries.
+// Lifetime diagnostic counts are deliberately owned separately by firmware.
+class RadioTimerRetryBudget {
+public:
+  bool observeHealth(uint64_t nowUs, uint32_t timerTicks, bool healthy) {
+    if (!healthy) {
+      trackingHealth_ = false;
+      return false;
+    }
+    if (!trackingHealth_ || nowUs < lastObservationUs_ ||
+        nowUs - lastObservationUs_ > RadioProgressPolicy::MaximumHealthyObservationGapUs) {
+      healthySinceUs_ = nowUs;
+      healthyStartTick_ = timerTicks;
+      lastObservationUs_ = nowUs;
+      trackingHealth_ = true;
+      return false;
+    }
+    lastObservationUs_ = nowUs;
+    if (nowUs - healthySinceUs_ < RadioProgressPolicy::TimerHealthyReplenishUs ||
+        static_cast<uint32_t>(timerTicks - healthyStartTick_) <
+            RadioProgressPolicy::MinimumHealthyTimerTicks) return false;
+    const bool replenished = attempts_ != 0;
+    attempts_ = 0;
+    healthySinceUs_ = nowUs;
+    healthyStartTick_ = timerTicks;
+    return replenished;
+  }
+  bool consumeAttempt() {
+    trackingHealth_ = false;
+    if (attempts_ >= RadioProgressPolicy::MaximumTimerRetries) return false;
+    ++attempts_;
+    return true;
+  }
+  uint32_t attemptsUsed() const { return attempts_; }
+private:
+  uint64_t healthySinceUs_ = 0;
+  uint64_t lastObservationUs_ = 0;
+  uint32_t healthyStartTick_ = 0;
+  uint8_t attempts_ = 0;
+  bool trackingHealth_ = false;
 };

@@ -1,0 +1,18 @@
+test_actual_functions_with_sanitizers (tests.test_radio_reliability.RadioReliabilityTests.test_actual_functions_with_sanitizers) ... Actual RF command tests passed: late/rejected generations, silence failure, AP/intentional leases, rollover and checked resume recovery
+Actual timer tests passed: allocation failure, bounded retries, absent interrupts, two-tick recovery and monitor creation failure
+Actual progress monitor tests passed: stopped ISR, stalled RF task, bounded BLE allowance, stalled loop restart and long uptime
+Actual retry budget passed: week-apart recovery, bounded rapid faults, IRQ qualification failure, continuous health, observation gaps, IRQ/millis rollover and saturated lifetime diagnostics
+ok
+test_actual_independent_progress_monitor (tests.test_radio_reliability.RadioReliabilityTests.test_actual_independent_progress_monitor) ... Actual progress monitor tests passed: stopped ISR, stalled RF task, bounded BLE allowance, stalled loop restart and long uptime
+ok
+test_actual_pause_generations_and_leases (tests.test_radio_reliability.RadioReliabilityTests.test_actual_pause_generations_and_leases) ... Actual RF command tests passed: late/rejected generations, silence failure, AP/intentional leases, rollover and checked resume recovery
+ok
+test_actual_replenishable_timer_budget (tests.test_radio_reliability.RadioReliabilityTests.test_actual_replenishable_timer_budget) ... Actual retry budget passed: week-apart recovery, bounded rapid faults, IRQ qualification failure, continuous health, observation gaps, IRQ/millis rollover and saturated lifetime diagnostics
+ok
+test_actual_timer_failure_and_recovery (tests.test_radio_reliability.RadioReliabilityTests.test_actual_timer_failure_and_recovery) ... Actual timer tests passed: allocation failure, bounded retries, absent interrupts, two-tick recovery and monitor creation failure
+ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 8.004s
+
+OK

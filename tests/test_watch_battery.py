@@ -115,6 +115,7 @@ unsigned long btLastFragmentMillis = 0;
 unsigned btNotifications = 0, btResponseErrors = 0;
 std::atomic<bool> btClientConnected{true}, btClientPreemptionEnabled{true};
 bool cancelled = false;
+bool clockTrusted() { return true; }
 uint32_t tick = 0, elapsed = 0;
 uint32_t millis() { return tick; }
 bool bleOperationCancelled() { return cancelled; }

@@ -1,19 +1,22 @@
 # Next version updates
 
-## Queued after the V4.14 R2 senior review
+## V4.15 — nine further reliability corrections
 
-All nine findings below are **future work**, queued at the user's request on 9 October 2026. They are not fixed in R2. See [the full post-publication review](V4.14-R2-post-publication-review.md) for source links, reproductions, conditions and recommended validation. Complete each change's reliability review before publishing, then run the full suite after publication; failures require a new numbered revision.
+All nine findings below were queued on 9 October 2026 and then explicitly authorized for immediate correction. They are implemented in **V4.15 R1**. The original [post-publication review](V4.14-R2-post-publication-review.md) preserves the failure evidence; the [V4.15 review](V4.15-review.md) records corrections and focused checks. Complete the reliability review before publishing, then run the full suite after publication; failures require a new numbered revision.
 
-- [ ] **P1 — NTP reacquisition:** recover from an incorrect initial plausible time anchor using bounded consistent multi-reply/server-confirmed reacquisition, with RF/BT off until trust returns. Test the reproduced one-hour initial error and correct replies over prolonged uptime.
-- [ ] **P1 — BLE host/scan/controller recovery:** add a common bounded shutdown/progress deadline covering scanner and controller failures when no client exists. Test an unacknowledged scan-stop event and repeated deinit errors; retain RF exclusion throughout recovery.
-- [ ] **P1 — HTTP request bounds:** limit POST body bytes before allocation and enforce an absolute request deadline below the loop monitor threshold. Test slow/disrupted client transfers and retain responsive firmware supervision.
-- [ ] **P2 — Final BT clock trust:** cancel active transactions when confidence is lost and recheck immediately before sampling/sending TIME. Test holdover expiry and rejected NTP during battery/font/handshake work; unwind callbacks safely.
-- [ ] **P2 — Timer retry replenishment:** replace the lifetime-only three-attempt budget with bounded consecutive/rate-window recovery and replenish after a verified healthy period. Keep lifetime diagnostics separate and prevent rapid endless retry.
-- [ ] **P2 — Strict saved configuration:** validate every field into a complete candidate, reject permissive numeric conversions such as `630junk`, and add versioned content integrity checks with bounded legacy migration. Preserve corrupt files for explicit recovery; add no periodic flash writes.
-- [ ] **P2 — Checked Wi-Fi shutdown:** check disconnect/mode results, distinguish desired from observed power state, expose a RAM fault and recover with bounded retries if Off fails. Test connected-but-unserviced state and SDK return failures.
-- [ ] **P3 — Adaptive NTP recovery:** aggregate short-interval drift samples or conservatively update uncertainty when intervals fall below 300 seconds. Test a jitter-induced 210-second interval followed by many correct replies; retain conservative trust limits.
-- [ ] **P3 — SSID byte limit:** enforce the ESP32 station's 32-byte SSID maximum in UI/API before saving, including UTF-8 byte length. Test accepted/rejected boundaries and setup recovery.
+- [x] **P1 — NTP reacquisition:** recover from an incorrect initial plausible time anchor using bounded consistent multi-reply/server-confirmed reacquisition, with RF/BT off until trust returns. Test the reproduced one-hour initial error and correct replies over prolonged uptime.
+- [x] **P1 — BLE host/scan/controller recovery:** add a common bounded shutdown/progress deadline covering scanner and controller failures when no client exists. Test an unacknowledged scan-stop event and repeated deinit errors; retain RF exclusion throughout recovery.
+- [x] **P1 — HTTP request bounds:** limit POST body bytes before allocation and enforce an absolute request deadline below the loop monitor threshold. Test slow/disrupted client transfers and retain responsive firmware supervision.
+- [x] **P2 — Final BT clock trust:** cancel active transactions when confidence is lost and recheck immediately before sampling/sending TIME. Test holdover expiry and rejected NTP during battery/font/handshake work; unwind callbacks safely.
+- [x] **P2 — Timer retry replenishment:** replace the lifetime-only three-attempt budget with bounded consecutive/rate-window recovery and replenish after a verified healthy period. Keep lifetime diagnostics separate and prevent rapid endless retry.
+- [x] **P2 — Strict saved configuration:** validate every field into a complete candidate, reject permissive numeric conversions such as `630junk`, and add versioned content integrity checks with bounded legacy migration. Preserve corrupt files for explicit recovery; add no periodic flash writes.
+- [x] **P2 — Checked Wi-Fi shutdown:** check disconnect/mode results, distinguish desired from observed power state, expose a RAM fault and recover with bounded retries if Off fails. Test connected-but-unserviced state and SDK return failures.
+- [x] **P3 — Adaptive NTP recovery:** aggregate short-interval drift samples or conservatively update uncertainty when intervals fall below 300 seconds. Test a jitter-induced 210-second interval followed by many correct replies; retain conservative trust limits.
+- [x] **P3 — SSID byte limit:** enforce the ESP32 station's 32-byte SSID maximum in UI/API before saving, including UTF-8 byte length. Test accepted/rejected boundaries and setup recovery.
 
+
+- [x] **V4.15 — Watch RAM history:** show the latest four successful or failed BT attempts for the selected watch, newest first, with date/time and protocol. Four entries per profile use a fixed 224-byte store; clear on reboot/watch replacement, with no new flash writes or snapshot restore.
+- [x] **V4.15 — Uptime formatting:** show hours, minutes and seconds consistently in Overview and Diagnostics.
 
 - [x] V4.8: Clarify the successful Bluetooth sync wording in **Watch (BLE) → Last watch result**. Show **“Time sync delivered”** after an acknowledged time write. Keep the technical explanation that the watch's resulting time/display has not been independently verified in Diagnostics. Preserve distinct failure messages and the successful sync date/time. This is a UI wording change; Bluetooth protocol and delivery checks stay unchanged.
 

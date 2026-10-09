@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / "firmware/RadioClock_V4_14/RadioClock_V4_14.ino"
+FIRMWARE = ROOT / "firmware/RadioClock_V4_15/RadioClock_V4_15.ino"
 
 
 def function(source, name):
@@ -73,6 +73,7 @@ std::atomic<bool> radioResumeRecoveryPending{false};
 std::atomic<uint32_t> loopStackMinimum{UINT32_MAX}, radioStackMinimum{UINT32_MAX}, monitorStackMinimum{UINT32_MAX};
 RadioPauseControl radioPauseControl;
 RadioBleArbiter radioBleArbiter;
+RadioTimerRetryBudget radioTimerRetryBudget;
 int radioCommandMux = 0, progressMux = 0;
 uint64_t applicationLoopLastUs=1, radioTaskLastUs=1, radioTimerLastUs=1;
 uint32_t radioTimerTicks=0, radioTimerStartTick=0;
@@ -143,6 +144,7 @@ void reset() {
   if(radioBleArbiter.bleOwned()) radioBleArbiter.finishBleShutdown(true);
   radioBleArbiter.releaseRf();
   radioPauseControl=RadioPauseControl{};
+  radioTimerRetryBudget=RadioTimerRetryBudget{};
   radioApPauseOwned=radioPaused=radioFaultLatched=false;
   radioResumeRecoveryPending=false;
   radioFaultReason=RADIO_FAULT_NONE;
@@ -269,6 +271,122 @@ int main() {
 }
 '''
 
+TIMER_BUDGET_CASES = r'''
+// Simulate the 1 kHz IRQ counter/heartbeat in bounded batches. Qualification
+// and recovery still use the production ISR and actual task/service functions.
+void healthyProgress(uint64_t durationUs) {
+  radioTaskLastUs=radioTimerLastUs=nowUs;
+  serviceRadioReliability();
+  while(durationUs) {
+    uint64_t step=durationUs>30000000ULL?30000000ULL:durationUs;
+    nowUs+=step; durationUs-=step;
+    radioTimerTicks+=static_cast<uint32_t>(step/1000ULL);
+    radioTaskLastUs=radioTimerLastUs=nowUs;
+    serviceRadioReliability();
+  }
+}
+void qualifyTimer() {
+  nowUs+=1000; onTimer(); radioSafetyTick(); serviceRadioReliability();
+  nowUs+=1000; onTimer(); radioSafetyTick(); serviceRadioReliability();
+  assert(radioTimerOperational());
+}
+void stallTimer() {
+  nowUs+=RadioProgressPolicy::TimerStallUs+1;
+  radioTaskLastUs=nowUs;
+  latchRadioFault(RADIO_FAULT_TIMER_STALLED);
+  assert(radioFaultActive() && !physicalCarrierOn());
+  nowUs+=RadioProgressPolicy::RetrySpacingUs;
+  radioTaskLastUs=nowUs;
+  serviceRadioReliability();
+}
+int main() {
+  reset(); assert(starttimer()); qualifyTimer();
+  for(unsigned episode=1;episode<=4;++episode) {
+    healthyProgress(7ULL*86400ULL*1000000ULL);
+    assert(radioTimerRetryBudgetUsed()==0);
+    const unsigned allocations=timerAllocations;
+    stallTimer();
+    assert(timerAllocations==allocations+1);
+    assert(radioTimerRetryCount()==episode && radioTimerRetryBudgetUsed()==1);
+    qualifyTimer();
+  }
+  assert(radioTimerRetryCount()==4); // The old lifetime cap stranded episode 4.
+
+  reset(); assert(starttimer()); qualifyTimer();
+  for(unsigned episode=1;episode<=3;++episode) {
+    stallTimer(); qualifyTimer();
+    healthyProgress(5ULL*60ULL*1000000ULL);
+    assert(radioTimerRetryBudgetUsed()==episode);
+  }
+  const unsigned rapidAllocations=timerAllocations;
+  stallTimer();
+  assert(timerAllocations==rapidAllocations && radioTimerRetryCount()==3);
+  healthyProgress(7ULL*86400ULL*1000000ULL);
+  assert(radioFaultActive() && !physicalCarrierOn());
+  assert(timerAllocations==rapidAllocations && radioTimerRetryBudgetUsed()==3);
+
+  reset(); timerAllocationOk=false; assert(!starttimer());
+  timerAllocationOk=true;
+  for(unsigned attempt=1;attempt<=3;++attempt) {
+    nowUs=radioTimerRetryUs; radioTaskLastUs=nowUs;
+    serviceRadioReliability();
+    assert(radioTimerRetryBudgetUsed()==attempt && istimerstarted);
+    nowUs+=1000001ULL; radioTaskLastUs=nowUs;
+    serviceRadioReliability(); // Allocation succeeds, but no IRQ qualification.
+    assert(radioFaultActive() && !radioTimerOperational());
+  }
+  const unsigned unqualifiedAllocations=timerAllocations;
+  nowUs+=7ULL*86400ULL*1000000ULL; radioTaskLastUs=nowUs;
+  serviceRadioReliability();
+  assert(timerAllocations==unqualifiedAllocations && radioTimerRetryCount()==3);
+
+  reset(); nowUs=uint64_t(UINT32_MAX)*1000ULL-600000000ULL;
+  radioTaskLastUs=radioTimerLastUs=nowUs;
+  radioTimerTicks=UINT32_MAX-1000000;
+  assert(starttimer()); qualifyTimer(); stallTimer(); qualifyTimer();
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs-1000);
+  assert(radioTimerRetryBudgetUsed()==1);
+  healthyProgress(1000);
+  assert(nowUs>uint64_t(UINT32_MAX)*1000ULL);
+  assert(radioTimerTicks<1000000); // Both millis and the ISR count rolled over.
+  assert(radioTimerRetryBudgetUsed()==0 && radioTimerRetryCount()==1);
+
+  reset(); assert(starttimer()); qualifyTimer(); stallTimer(); qualifyTimer();
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs/2);
+  nowUs+=RadioProgressPolicy::TimerStallUs+1;
+  radioTaskLastUs=nowUs; serviceRadioReliability(); // No fresh IRQ: break health.
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs/2);
+  assert(radioTimerRetryBudgetUsed()==1);
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs/2);
+  assert(radioTimerRetryBudgetUsed()==0);
+
+  reset(); assert(starttimer()); qualifyTimer(); stallTimer(); qualifyTimer();
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs/2);
+  nowUs+=RadioProgressPolicy::MaximumHealthyObservationGapUs+1;
+  radioTaskLastUs=radioTimerLastUs=nowUs;
+  radioTimerTicks+=70001; serviceRadioReliability(); // Fresh now, unobserved gap.
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs/2);
+  assert(radioTimerRetryBudgetUsed()==1);
+  healthyProgress(RadioProgressPolicy::TimerHealthyReplenishUs/2);
+  assert(radioTimerRetryBudgetUsed()==0);
+
+  reset(); assert(starttimer()); qualifyTimer(); stallTimer(); qualifyTimer();
+  radioTaskLastUs=radioTimerLastUs=nowUs;
+  serviceRadioReliability();
+  for(unsigned minute=0;minute<31;++minute) {
+    nowUs+=60000000ULL; radioTaskLastUs=radioTimerLastUs=nowUs;
+    serviceRadioReliability(); // Faked fresh timestamps alone are insufficient.
+  }
+  assert(radioTimerRetryBudgetUsed()==1);
+
+  reset(); timerAllocationOk=false; assert(!starttimer());
+  radioTimerRetries=UINT32_MAX;
+  nowUs=radioTimerRetryUs; radioTaskLastUs=nowUs; serviceRadioReliability();
+  assert(radioTimerRetryCount()==UINT32_MAX && radioTimerRetryBudgetUsed()==1);
+  puts("Actual retry budget passed: week-apart recovery, bounded rapid faults, IRQ qualification failure, continuous health, observation gaps, IRQ/millis rollover and saturated lifetime diagnostics");
+}
+'''
+
 PROGRESS_CASES = r'''
 int main() {
   reset();istimerstarted=1;duty=512;
@@ -310,7 +428,8 @@ class RadioReliabilityTests(unittest.TestCase):
     def unit(self):
         names = ['silenceRfCarrier', 'emergencyRfOff', 'latchRadioFault',
                  'applicationForceSafeRestart', 'radioFaultActive', 'radioFaultCode',
-                 'radioTimerRetryCount', 'radioCommandTimeoutCount', 'radioTimerOperational',
+                 'radioTimerRetryCount', 'radioTimerRetryBudgetUsed',
+                 'radioCommandTimeoutCount', 'radioTimerOperational',
                  'progressAgeMs', 'applicationLoopAgeMs', 'radioTaskAgeMs', 'radioTimerAgeMs',
                  'applicationLoopStackMinimum', 'radioTaskStackMinimum', 'safetyMonitorStackMinimum',
                  'applicationProgressCheckpoint', 'radioProcessPauseCommand', 'radioSetPaused',
@@ -348,10 +467,14 @@ class RadioReliabilityTests(unittest.TestCase):
     def test_actual_independent_progress_monitor(self):
         self.compile_and_run(PROGRESS_CASES)
 
+    def test_actual_replenishable_timer_budget(self):
+        self.compile_and_run(TIMER_BUDGET_CASES)
+
     def test_actual_functions_with_sanitizers(self):
         self.compile_and_run(COMMAND_CASES, sanitize=True)
         self.compile_and_run(TIMER_CASES, sanitize=True)
         self.compile_and_run(PROGRESS_CASES, sanitize=True)
+        self.compile_and_run(TIMER_BUDGET_CASES, sanitize=True)
 
 
 if __name__ == '__main__':

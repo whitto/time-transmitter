@@ -1,0 +1,11 @@
+test_final_time_rechecks_trust_after_battery_font_connect_and_sample (test_bluetooth_workflow.BluetoothWorkflowTest.test_final_time_rechecks_trust_after_battery_font_connect_and_sample) ... Actual BX/standard TIME is withheld after lost clock trust; normal disconnect unwinds all paths
+ok
+test_font_transaction_against_github_packets (test_watch_options.WatchOptionsTest.test_font_transaction_against_github_packets) ... Captured 12-byte and webapp 17-byte font packets preserved; read/write/readback precedes fresh TIME; font failures stay separate
+ok
+test_notification_routing_and_bounded_wait (test_watch_battery.WatchBatteryTest.test_notification_routing_and_bounded_wait) ... Battery notification channel, fragmented reply, 1.5s wait budget, cancellation and overflow guards passed
+ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.446s
+
+OK

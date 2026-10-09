@@ -195,6 +195,10 @@ int main() {
   btTimezoneName = "Asia/Tokyo"; btTimeOffsetMinutes = 30;
   activityLedEnabled = false; assert(writeConfigNow());
   auto newConfig = flash.at(CONFIG_FILE);
+  // Simulate an actual pre-integrity record, rather than a truncated V4.15
+  // record, whose missing CRC must always be rejected.
+  newConfig.erase(0,newConfig.find('\n')+1);
+  newConfig.erase(newConfig.rfind("CRC32:"));
   const std::string lastLegacyFields = "\nAsia/Tokyo\n30\n";
   const auto legacyEnd = newConfig.rfind(lastLegacyFields);
   assert(legacyEnd != std::string::npos);

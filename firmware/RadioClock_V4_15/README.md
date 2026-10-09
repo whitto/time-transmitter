@@ -1,17 +1,23 @@
-# RadioClock V4.14 build R2 — Arduino source
+# RadioClock V4.15 build R1 — Arduino source
 
-Open `RadioClock_V4_14.ino` in Arduino IDE **2.3.4**. Keep this complete **14-file folder** together: the sketch, eleven headers, `partitions.csv` and this README. The headers are `RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h`, `CasioWatchBattery.h`, `BtSyncLed.h`, `BtSyncHistory.h`, `RadioWifiAccessWindow.h`, `RadioConfigWriter.h`, `RadioJsonWriter.h` and `RadioReliability.h`. The UI is embedded; no separate UI upload is needed.
+Open `RadioClock_V4_15.ino` in Arduino IDE **2.3.4**. Keep this complete **15-file folder** together: the sketch, twelve headers, `partitions.csv` and this README. The headers are `RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h`, `CasioWatchBattery.h`, `BtSyncLed.h`, `BtSyncHistory.h`, `BtRecentSyncs.h`, `RadioWifiAccessWindow.h`, `RadioConfigWriter.h`, `RadioJsonWriter.h` and `RadioReliability.h`. The UI is embedded; no separate UI upload is needed.
 
 Install **esp32 by Espressif Systems 3.3.12** and **ArduinoJson 6.21.5**. For a classic 4 MB Node32 / Node32s, choose **Node32s**, **40 MHz** flash and **No OTA (Large APP)**. ESP32 Dev Module with **4MB / Huge APP** is also supported. The supplied partition table defines the project's 3 MB application layout; the default small partition is insufficient. Routine uploads do not require erasing all flash.
 
-Install both included source libraries into your Arduino sketchbook's `libraries` folder and restart the IDE:
+Install all three included source libraries into your Arduino sketchbook's `libraries` folder and restart the IDE:
 
 - **NimBLE-Arduino 2.5.1-radioclock.1**: replace the ordinary Library Manager 2.5.1 installation with the complete `NimBLE-Arduino` folder. Remove duplicate unpatched installations. This pinned version includes the upstream host-timer shutdown correction and checked initialization allocations; the firmware rejects an unpatched build. Alternatively install <https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip> using **Sketch → Include Library → Add .ZIP Library**. Keep the source manifest, patch and original licenses.
 - **RadioCrashDumpGate 1.0.0**: keep all five files, including `library.properties`, `src/` and `src/esp32/README.md`. Alternatively install <https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip> with **Add .ZIP Library**. Its linker metadata is required; missing metadata deliberately fails compilation. The helper targets classic ESP32; other targets need separate validation.
 
-The full repository stores these under `libraries/`. The Arduino-only ZIP places both library folders beside the sketch. Cloud compile scripts install and verify both automatically. These packages contain source, not compiled binaries.
+- **RadioBoundedWebServer 3.3.12-radioclock.1**: install the complete separately named `RadioBoundedWebServer` folder. It contains the guarded server source and provenance manifest; the standard ESP32 board-core WebServer remains installed. It preserves dashboard text forms/JSON while bounding request size/duration; file uploads and transfer-encoded bodies are unsupported.
 
-R2 implements the approved long-run reliability corrections: bounded and verified configuration/schedule saves, no recurring failed-save retries, preserved storage on mount failure, automatic router recovery, nonblocking network startup, NTP wakeups before clock-trust deadlines, bounded Bluetooth transactions, safe callback teardown, RF command ownership and timing-progress safeguards. Uptime uses the 64-bit monotonic clock; drift confidence uses conservative absolute measurements. Diagnostics exposes RAM-only faults, progress and stack headroom; its full refresh runs only when needed.
+The full repository stores these under `libraries/`. The Arduino-only ZIP places all three library folders beside the sketch. Cloud compile scripts install and verify all three automatically. These packages contain source, not compiled binaries.
+
+V4.15 retains the prior approved long-run reliability corrections: bounded and verified configuration/schedule saves, no recurring failed-save retries, preserved storage on mount failure, automatic router recovery, nonblocking network startup, NTP wakeups before clock-trust deadlines, bounded Bluetooth transactions, safe callback teardown, RF command ownership and timing-progress safeguards. Uptime uses the 64-bit monotonic clock; drift confidence uses conservative absolute measurements. Diagnostics exposes RAM-only faults, progress and stack headroom; its full refresh runs only when needed.
+
+V4.15 fixes all nine further review findings: three-reply/30-second NTP acquisition and reacquisition, bounded no-client BLE shutdown progress, checked HTTP body/header sizes and absolute deadlines, final BT clock-confidence checks, timer retry replenishment after 30 minutes of qualified health, strict versioned/CRC saved settings, checked Wi-Fi shutdown with RAM faults/backoff, drift aggregation across short NTP intervals, and 32-byte UTF-8 SSID limits. The RF encoder and watch packet formats remain intact. Initial or corrected time is provisional until the NTP confirmation window completes.
+
+Watch (BLE) displays the last four successful or failed BT attempts for the selected watch, newest first, with the attempt date/time and protocol. The fixed 224-byte history is RAM only, clears on reboot/watch replacement and is never restored from the daily snapshot. Overview and Diagnostics both display uptime in hours, minutes and seconds.
 
 A failed configuration save retains the previous file and reports failure. Background retries stop; an explicit successful user save clears the RAM fault. Boot rejects oversized/malformed configuration without deleting it. A filesystem mount failure preserves settings, keeps RF off and provides a setup AP. **Settings → Storage recovery** permits an explicitly confirmed erase only in the mount-fault AP. This removes Wi-Fi/configuration/schedules/BT history and restarts; ordinary save errors do not authorize formatting. A freshly erased board may require this explicit initialization.
 
@@ -27,10 +33,10 @@ The saved GPIO2 LED control remains: flash during actual BT sync only, solid for
 
 GW-BX5600 optional font changes precede final TIME, with packet length/unrelated settings preserved and readback. Experimental battery estimates are read before the handshake, shown per watch with date/time, and kept in RAM; battery-only errors do not prevent TIME. Other protocols have no validated battery calibration. RF keeps priority over BLE. JJY and BT settings/timezones remain independent.
 
-R2 test/build results and the required pre-publication reliability review are recorded in the full repository's `docs/V4.14-R2-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md`. Physical Node32s/watch acceptance and a long soak remain required; cloud checks cannot guarantee years of uninterrupted service.
+Focused checks and the required pre-publication reliability review are recorded in the full repository’s `docs/V4.15-review.md`. Source is published before the full suite, with results added to release notes afterward as requested. Physical Node32s/watch acceptance and a long soak remain required; cloud checks cannot guarantee years of uninterrupted service.
 
 With no saved credentials, connect to **RadioStation_XXXXXX**, password **12345678**, and open **http://192.168.4.1**.
 
 Project and credits: <https://github.com/whitto/time-transmitter>. Original RadioClock notices credit **tarohs/nisejjy** (2021) and **5Breeze/ClockWaveXmitter** (2025); they remain in the sketch. Casio packet/font/battery references include **izivkov/gshock-smart-sync-webapp** and **izivkov/gshock_api**. NimBLE source retains its authors' licenses and notices.
 
-Full ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.14-r2.zip>. Arduino source and both libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.14-r2.zip>.
+Full ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15.zip>. Arduino source and all three libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15.zip>.

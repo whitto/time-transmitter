@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_14/RadioClock_V4_14.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
 
 
 def function(source, name):
@@ -70,7 +70,9 @@ std::atomic<int> ntpsync{1};
 uint64_t mockMonoUs = 1000000;
 int64_t esp_timer_get_time() { return mockMonoUs; }
 int64_t restoredEpochUs = 0;
+bool setTimeOk = true;
 int fakeSetTime(const struct timeval* tv, const void*) {
+  if (!setTimeOk) return -1;
   restoredEpochUs = (int64_t)tv->tv_sec*1000000 + tv->tv_usec; return 0;
 }
 #define settimeofday fakeSetTime
@@ -163,6 +165,11 @@ void resetClock() {
   clockNtpEverSynced = false; clockNtpSyncCount = 0;
   clockDriftSampleAvailable = false; clockDriftBoundPpm = CLOCK_INITIAL_PPM;
   clockNtpRejected = false; clockNtpRejectedCount = 0; restoredEpochUs = 0;
+  setTimeOk = true;
+  ntpCandidateReplies = clockNtpCandidateReplyCount = 0;
+  ntpCandidateMonoUs = ntpCandidateLastMonoUs = 0; ntpCandidateEpochUs = 0;
+  clockNtpReacquisitionCount = 0;
+  ntpDriftAnchorMonoUs = 0; ntpDriftAnchorEpochUs = 0;
   ntpIntervalSec = NTP_INITIAL_INTERVAL_SEC;
   mockMonoUs = 1000000; sdkIntervalMs = 3600000;
   sdkNextTimeoutMs = 0; ntpRestarts = 0;
@@ -174,6 +181,14 @@ void receiveReply(int64_t epochUs) {
   sntp_sync_time(&tv);
   sdkNextTimeoutMs = sdkIntervalMs;
 }
+void establishClock(int64_t epoch) {
+  receiveReply(epoch);
+  assert(!clockTrusted() && restoredEpochUs == 0 && clockNtpCandidateReplyCount == 1);
+  mockMonoUs += 15000000ULL; receiveReply(epoch + 15000000LL);
+  assert(!clockTrusted() && restoredEpochUs == 0 && clockNtpCandidateReplyCount == 2);
+  mockMonoUs += 15000000ULL; receiveReply(epoch + 30000000LL);
+  assert(clockTrusted() && clockNtpSyncCount == 1 && clockNtpCandidateReplyCount == 0);
+}
 void testNtpShortReplies() {
   resetClock();
   assert(clockAgeSeconds() == UINT32_MAX && !clockTrusted());
@@ -181,9 +196,15 @@ void testNtpShortReplies() {
   for (int reply=0; reply<8; ++reply) {
     mockMonoUs += 2000000;
     receiveReply(epoch + reply*2000000LL);
-    assert(sdkNextTimeoutMs == NTP_INITIAL_INTERVAL_SEC*1000);
+    assert(sdkNextTimeoutMs == NTP_MIN_INTERVAL_SEC*1000 && !clockTrusted());
   }
-  assert(ntpRestarts == 0 && clockNtpSyncCount == 8);
+  // Too-fast notifications cannot manufacture independent acquisition.
+  mockMonoUs += 16000000ULL; receiveReply(epoch + 30000000LL);
+  assert(clockTrusted() && clockNtpSyncCount == 1 && clockNtpRejectedCount == 0);
+  for (int reply=1;reply<=8;++reply) {
+    mockMonoUs += 2000000ULL; receiveReply(epoch+30000000LL+reply*2000000LL);
+  }
+  assert(ntpRestarts == 0 && clockNtpSyncCount == 9);
   assert(!clockDriftSampleAvailable);
   assert(fabs(clockEstimatedError() - 0.20) < 1e-9);
   mockMonoUs += 18000ULL*1000000;
@@ -193,10 +214,11 @@ void testNtpShortReplies() {
 void measureDrift(double ppm) {
   resetClock();
   const int64_t epoch = 1760000000LL*1000000;
-  receiveReply(epoch);
+  establishClock(epoch);
+  const int64_t anchor=ntpLastEpochUs;
   const int64_t elapsed = 3600LL*1000000;
   mockMonoUs += elapsed;
-  receiveReply(epoch + elapsed + (int64_t)llround(elapsed*ppm/1000000.0));
+  receiveReply(anchor + elapsed + (int64_t)llround(elapsed*ppm/1000000.0));
   assert(clockDriftSampleAvailable);
   assert(fabs(ntpDriftPpm - ppm) < 1e-7);
   assert(sdkNextTimeoutMs == ntpIntervalSec.load()*1000);
@@ -245,12 +267,83 @@ void testDriftReversalsAndRejectedCorrections() {
   assert(restoredEpochUs==anchor && sdkSyncStatus==SNTP_SYNC_STATUS_RESET && sdkNextTimeoutMs==15000);
   mockMonoUs+=15000000;
   receiveReply(anchor+75LL*1000000);
+  assert(clockNtpSyncCount==count && !clockTrusted());
+  mockMonoUs+=15000000; receiveReply(anchor+90LL*1000000);
+  assert(clockNtpSyncCount==count && !clockTrusted());
+  mockMonoUs+=15000000; receiveReply(anchor+105LL*1000000);
   assert(clockNtpSyncCount==count+1 && clockTrusted() && !clockNtpRejected);
+  assert(clockNtpReacquisitionCount==1 && !clockDriftSampleAvailable);
   resetClock(); receiveReply(0);
   assert(!clockNtpEverSynced && clockNtpRejectedCount==1 && !clockTrusted());
   mockMonoUs=0x100000000ULL*1000000ULL+1234567;
   assert(monotonicUptimeSeconds()==0x100000001ULL);
   puts("Absolute uncertainty retains sign reversals; implausible corrections lose trust/restore anchor; 64-bit uptime");
+}
+void testAcquisitionAndBadAnchorRecovery() {
+  resetClock();
+  const int64_t epoch = 1791500000LL * 1000000LL;
+  // The reproduced arbitrary one-hour-ahead first reply is never committed.
+  receiveReply(epoch + 3600LL*1000000);
+  assert(!clockTrusted() && restoredEpochUs == 0);
+  for (int i=1;i<=3;++i) {
+    mockMonoUs += 15000000ULL;
+    receiveReply(epoch+i*15000000LL);
+    if (i<3) assert(!clockTrusted() && restoredEpochUs==0);
+  }
+  assert(clockTrusted() && ntpLastEpochUs==epoch+45000000LL);
+  // Even if three consistent wrong replies established an old bad anchor,
+  // correct replies replace it in 30 seconds instead of weeks.
+  resetClock();establishClock(epoch+3600LL*1000000);
+  const uint64_t startMono = mockMonoUs;
+  const int64_t correctStart=epoch+30000000LL;
+  for (int i=1;i<=5760;++i) {
+    mockMonoUs=startMono+(uint64_t)i*15000000ULL;
+    receiveReply(correctStart+i*15000000LL);
+    if(i<3) assert(!clockTrusted() && clockNtpSyncCount==1);
+    else assert(clockTrusted() && restoredEpochUs==correctStart+i*15000000LL);
+  }
+  assert(clockNtpReacquisitionCount==1 && clockNtpSyncCount==5759);
+  puts("One wrong initial reply never committed; accepted bad anchor recovered after three correct replies and stayed trusted for 24 hours");
+}
+void testAcquisitionMalformedAlternatingExpiredAndCommitFailure() {
+  const int64_t epoch=1791500000LL*1000000LL;
+  resetClock();
+  for(int i=0;i<10;++i) {
+    mockMonoUs+=15000000ULL;
+    receiveReply(epoch+(int64_t)i*15000000LL+(i%2 ? 3600LL*1000000LL : 0));
+    assert(!clockTrusted() && restoredEpochUs==0 && clockNtpCandidateReplyCount==1);
+  }
+  struct timeval malformed{(time_t)(epoch/1000000LL),1000000};
+  sntp_sync_time(&malformed);
+  assert(clockNtpCandidateReplyCount==0 && !clockTrusted());
+  resetClock();receiveReply(epoch);
+  mockMonoUs+=15000000ULL;receiveReply(epoch+15000000LL);
+  mockMonoUs+=NTP_CANDIDATE_MAX_SPAN_US+1;
+  receiveReply(epoch+15000000LL+(int64_t)NTP_CANDIDATE_MAX_SPAN_US+1);
+  assert(!clockTrusted() && clockNtpCandidateReplyCount==1 && restoredEpochUs==0);
+  resetClock();receiveReply(epoch);
+  mockMonoUs+=15000000ULL;receiveReply(epoch+15000000LL);
+  setTimeOk=false;mockMonoUs+=15000000ULL;receiveReply(epoch+30000000LL);
+  assert(!clockTrusted() && !clockNtpEverSynced && restoredEpochUs==0);
+  setTimeOk=true;mockMonoUs+=15000000ULL;receiveReply(epoch+45000000LL);
+  assert(clockTrusted() && clockNtpSyncCount==1);
+  puts("Alternating, malformed, expired and failed-commit NTP candidates cannot grant trust");
+}
+void testAdaptiveShortIntervalRecovers() {
+  resetClock();const int64_t epoch=1791500000LL*1000000LL;establishClock(epoch);
+  const int64_t anchor=ntpLastEpochUs;
+  mockMonoUs+=300000000ULL;receiveReply(anchor+300000000LL+500000LL);
+  const uint32_t penaltyInterval=ntpIntervalSec.load();
+  const double penaltyBound=clockDriftBoundPpm;
+  assert(penaltyInterval<300 && penaltyInterval>=15);
+  for(int i=1;i<=100;++i) {
+    mockMonoUs+=(uint64_t)penaltyInterval*1000000ULL;
+    receiveReply(anchor+300000000LL+(int64_t)i*penaltyInterval*1000000LL);
+    assert(clockTrusted());
+  }
+  assert(clockDriftBoundPpm<penaltyBound && ntpIntervalSec>penaltyInterval);
+  printf("500ms jitter penalty recovered from %.3fppm/%us to %.3fppm/%us using accumulated sub-300s replies\n",
+    penaltyBound,penaltyInterval,clockDriftBoundPpm,ntpIntervalSec.load());
 }
 unsigned bitCount(unsigned symbol) { return (symbol&1) + ((symbol>>1)&1); }
 unsigned decode(const int* positions, int count, int base) {
@@ -302,6 +395,9 @@ int main(int argc, char** argv) {
   else if (test == "short_replies") testNtpShortReplies();
   else if (test == "adaptive") testAdaptiveTrust();
   else if (test == "reliability") testDriftReversalsAndRejectedCorrections();
+  else if (test == "acquisition") testAcquisitionAndBadAnchorRecovery();
+  else if (test == "candidate_faults") testAcquisitionMalformedAlternatingExpiredAndCommitFailure();
+  else if (test == "short_recovery") testAdaptiveShortIntervalRecovers();
   else if (test == "bpc") testBpcBlocks();
   else assert(false);
   puts("PASS");
@@ -322,7 +418,7 @@ class ClockAndEncoderTests(unittest.TestCase):
                      'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
                      'posixTzFor', 'applyTimezone', 'stationTime', 'clearTxFrame',
                      'mb_bpc', 'configureAdaptiveNtp', 'ntpReplyPlausible', 'rejectNtpReply',
-                     'onNtpSync', 'sntp_sync_time']
+                     'admitNtpReply', 'recordAcceptedNtpReply', 'onNtpSync', 'sntp_sync_time']
         body = '\n'.join(function(source, name) for name in functions)
         cls.directory = tempfile.TemporaryDirectory(prefix='radioclock-clock-tests-')
         path = Path(cls.directory.name)
@@ -330,6 +426,7 @@ class ClockAndEncoderTests(unittest.TestCase):
         cpp.write_text(MOCKS + clock_globals + body + CASES)
         cls.binary = path / 'clock'
         subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                         str(cpp), '-o', str(cls.binary)], check=True)
 
     @classmethod
@@ -354,6 +451,15 @@ class ClockAndEncoderTests(unittest.TestCase):
 
     def test_absolute_drift_envelope_rejected_corrections_and_multi_year_uptime(self):
         self.run_case('reliability')
+
+    def test_initial_candidate_and_prolonged_bad_anchor_reacquisition(self):
+        self.run_case('acquisition')
+
+    def test_malformed_alternating_expired_and_failed_commit_candidates(self):
+        self.run_case('candidate_faults')
+
+    def test_short_interval_jitter_penalty_can_recover(self):
+        self.run_case('short_recovery')
 
     def test_bpc_block_numbers_parity_fields_and_pulse_envelopes(self):
         self.run_case('bpc')

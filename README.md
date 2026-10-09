@@ -1,4 +1,4 @@
-# Time Transmitter — RadioClock V4.14 build R2
+# Time Transmitter — RadioClock V4.15 build R1
 
 Time Transmitter is an ESP32 project for synchronizing "atomic" watches (Casio and Citizen tested) with a esp32 generating a local LF time signal.  Additionally I've added   Casio Bluetooth time delivery for some supported watches (tested on a Gshock Square GW-BX5600) this project combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin a pair of 330 ohm resistors (in parallel) to reduce the GPIO current (thats all I had) and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar)
@@ -25,6 +25,8 @@ Dashboard preview with sample status data.
 - The Watch card has an independent Bluetooth time-zone selector and additive offset, defaulting to Australia/Brisbane. The JJY/LF station time remains controlled by its own timezone and transmission offset.
 - The main dashboard shows both the JJY transmitted time and the current civil time that the next Bluetooth watch write will use.
 - Successful Bluetooth syncs show their date and time in the overview hero, watch card, and quick status. Automatic watch-sync slots are interpreted in the selected Bluetooth timezone plus offset, while LF schedules stay in the JJY/station timezone.
+- Watch (BLE) shows the last four successful or failed BT attempts for the selected watch, newest first, with date/time and protocol. This fixed-size history stays in RAM and clears on reboot; it is separate from the optional daily flash snapshot.
+- Overview and Diagnostics display uptime in hours, minutes and seconds, including multi-day runs.
 - A saved blue ESP32 BT sync indicator toggle: Off keeps GPIO2 dark; On flashes only during an actual Bluetooth connection/time-sync transaction. Successful time delivery leaves it solid for 24 hours; a failed BT transaction clears it. LF transmission, Wi-Fi and idle watch listening never make it flash.
 - Optional compact Bluetooth status retention: immediately save the first successful sync each Brisbane calendar day, including UTC success timestamps, watch identity and four diagnostic counters. Later events stay in RAM. No serial logs, font results, battery readings or error text are stored in this snapshot.
 - Optional crash dumps in Settings, default Off: allow the ESP32 SDK to store a diagnostic dump only after a panic, independently of the daily BT status snapshot. Ordinary serial logs are not stored in flash.
@@ -66,13 +68,15 @@ The build target is the classic ESP32 Node32 / ESP32 Dev Module with 4 MB flash,
 
 For Arduino IDE, install those board/library versions and open:
 
-`firmware/RadioClock_V4_14/RadioClock_V4_14.ino`
+`firmware/RadioClock_V4_15/RadioClock_V4_15.ino`
 
-Keep all eleven companion headers—`RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h`, `CasioWatchBattery.h`, `BtSyncLed.h`, `BtSyncHistory.h`, `RadioWifiAccessWindow.h`, `RadioConfigWriter.h`, `RadioJsonWriter.h` and `RadioReliability.h`—and `partitions.csv` beside the sketch. For **ESP32 Dev Module**, select **Flash Size: 4MB (32Mb)** and **Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)**. The default 1.25 MB application partition is too small for this project. On **Node32s**, **No OTA (Large APP)** also provides sufficient compile capacity; the included sketch-local partition table supplies the project's 3 MB application layout. This layout has one application slot and does not support dual-slot OTA updates.
+Keep all twelve companion headers—`RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h`, `CasioWatchBattery.h`, `BtSyncLed.h`, `BtSyncHistory.h`, `BtRecentSyncs.h`, `RadioWifiAccessWindow.h`, `RadioConfigWriter.h`, `RadioJsonWriter.h` and `RadioReliability.h`—and `partitions.csv` beside the sketch. For **ESP32 Dev Module**, select **Flash Size: 4MB (32Mb)** and **Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)**. The default 1.25 MB application partition is too small for this project. On **Node32s**, **No OTA (Large APP)** also provides sufficient compile capacity; the included sketch-local partition table supplies the project's 3 MB application layout. This layout has one application slot and does not support dual-slot OTA updates.
 
-V4.14 also requires the included **RadioCrashDumpGate 1.0.0** source library. Copy `libraries/RadioCrashDumpGate` from the full repository, or `RadioCrashDumpGate` from the Arduino-only archive, into your Arduino sketchbook's `libraries` folder. Keep all five files, including `library.properties`, `src/` and its `esp32/README.md` marker, together and restart Arduino IDE. Alternatively, download [the library-only ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip) and use **Sketch → Include Library → Add .ZIP Library**. This library supplies the linker option needed for the crash-dump toggle; a missing `RadioCrashDumpGate.h` means it has not been installed. Missing linker metadata deliberately fails the build. The cloud compile script installs the included library automatically. The Arduino-only ZIP contains the complete 14-file sketch folder, the five-file crash-gate library and the complete patched NimBLE source library; no compiled library archive is supplied. The helper targets classic ESP32; other MCU targets require their own linker metadata and validation.
+V4.15 includes the required **RadioCrashDumpGate 1.0.0** source library. Copy `libraries/RadioCrashDumpGate` from the full repository, or `RadioCrashDumpGate` from the Arduino-only archive, into your Arduino sketchbook's `libraries` folder. Keep all five files, including `library.properties`, `src/` and its `esp32/README.md` marker, together and restart Arduino IDE. Alternatively, download [the library-only ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip) and use **Sketch → Include Library → Add .ZIP Library**. This library supplies the linker option needed for the crash-dump toggle; a missing `RadioCrashDumpGate.h` means it has not been installed. Missing linker metadata deliberately fails the build. The cloud compile script installs the included library automatically. The Arduino-only ZIP contains the complete 15-file sketch folder and all three required source libraries: RadioCrashDumpGate, patched NimBLE-Arduino and RadioBoundedWebServer. No compiled library archive is supplied. The helper targets classic ESP32; other MCU targets require their own linker metadata and validation.
 
-V4.14 R2 also requires the included **patched NimBLE-Arduino 2.5.1-radioclock.1**. Replace the ordinary Library Manager 2.5.1 installation in your Arduino sketchbook's `libraries` folder with the complete `libraries/NimBLE-Arduino` folder from this repository, or the `NimBLE-Arduino` folder from the Arduino-only ZIP, and restart the IDE. You can instead install [the patched library ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip) using **Sketch → Include Library → Add .ZIP Library**. Remove duplicate unpatched NimBLE installations so Arduino selects the included version. The firmware deliberately rejects an unpatched library at compile time. Its source manifest, patch, README and original licenses document the pinned changes; the cloud compile script installs and verifies it automatically.
+V4.15 also requires the included **patched NimBLE-Arduino 2.5.1-radioclock.1**. Replace the ordinary Library Manager 2.5.1 installation in your Arduino sketchbook's `libraries` folder with the complete `libraries/NimBLE-Arduino` folder from this repository, or the `NimBLE-Arduino` folder from the Arduino-only ZIP, and restart the IDE. You can instead install [the patched library ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip) using **Sketch → Include Library → Add .ZIP Library**. Remove duplicate unpatched NimBLE installations so Arduino selects the included version. The firmware deliberately rejects an unpatched library at compile time. Its source manifest, patch, README and original licenses document the pinned changes; the cloud compile script installs and verifies it automatically.
+
+V4.15 requires **RadioBoundedWebServer 3.3.12-radioclock.1**. Install the complete `RadioBoundedWebServer` folder from the Arduino-only ZIP into your sketchbook’s `libraries` folder, then restart Arduino IDE. This is a separately named, source-pinned copy of ESP32’s server with checked request-size and absolute-time bounds; the ordinary board-core WebServer stays installed. The cloud script validates and installs it automatically. Text multipart forms, URL-encoded forms and JSON used by the dashboard are retained; file uploads and transfer-encoded request bodies are not supported by this project.
 
 In the Codex Linux cloud workspace:
 
@@ -87,7 +91,7 @@ The installer keeps the pinned tools and packages in `/workspace/.radioclock-too
 
 With no saved Wi-Fi credentials, connect to the visible 2.4 GHz setup network **RadioStation_XXXXXX** (device-specific suffix), password **12345678**, and open **http://192.168.4.1**. V4.10 uses the device AP MAC independently of startup events, instead of naming the network from a not-yet-initialized netif. AP success is logged only after the driver, AP-start event, configuration and local IP are ready. Failed initialization logs its stage and retries after five seconds; configuration is not erased. If the device MAC cannot be read, the fallback SSID is **RadioStation_Setup**. Driver readiness does not prove reception on a phone; if the AP remains absent, capture the new serial error and check another nearby 2.4 GHz client.
 
-Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_14`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
+Build outputs are in `/workspace/.radioclock-tools/output/RadioClock_V4_15`. Override `RADIOCLOCK_TOOLS_DIR` to move tool storage or `RADIOCLOCK_BUILD_JOBS` to change the default two compiler jobs. `RADIOCLOCK_FQBN` is available for another compatible target, which needs its own validation.
 
 ## Watch controls
 
@@ -147,13 +151,13 @@ The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and
 
 Before publishing, compare the rendered UI against the user's request and the approved mockup, then complete a fresh embedded reliability review. Check memory and allocation failures, task/callback lifetimes, deadlines and rollover, RF/BLE exclusion, network recovery, durable settings and flash-write frequency. Address regressions before publication. Ask before changing the fundamental layout or departing from that design. These requirements are recorded in `AGENTS.md`.
 
-[Download the V4.14 R2 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.14-r2.zip).
+[Download the V4.15 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15.zip).
 
-[Download only the Arduino source files](https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.14-r2.zip).
+[Download only the Arduino source files](https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15.zip).
 
-[V4.14 R2 release notes](https://github.com/whitto/time-transmitter/releases/tag/v4.14-r2).
+[V4.15 release notes](https://github.com/whitto/time-transmitter/releases/tag/v4.15).
 
-[Download the session handoff Markdown](https://raw.githubusercontent.com/whitto/time-transmitter/v4.14-r2/docs/SESSION_HANDOFF.md).
+[Download the session handoff Markdown](https://raw.githubusercontent.com/whitto/time-transmitter/main/docs/SESSION_HANDOFF.md).
 
 After editing the UI, regenerate its embedded gzip asset and run checks:
 
@@ -167,9 +171,27 @@ The checks run the actual UI script against mocked APIs, compile extracted firmw
 
 V4.14 R2 implements the user's approved long-run reliability changes: safe saves under low memory, no recurring failed-config retries, non-destructive filesystem recovery, the pinned NimBLE host-timer correction, bounded BT deadlines and allocation admission, nonblocking Wi-Fi/NTP recovery, trust-driven NTP wakes, ownership-safe RF pauses, checked timing startup/progress, rollover-safe uptime and conservative drift confidence. Common JSON responses use bounded storage and Diagnostics refreshes on demand. See [the R2 release review](docs/V4.14-R2-review.md) and [the updated reliability report](docs/LONG_RUN_RELIABILITY_REVIEW.md). V4.14 R1 introduced the optional crash-dump gate; its [original review](docs/V4.14-review.md) remains historical evidence. V4.13's approved LED/status/Wi-Fi behavior and compact daily snapshot remain; R2 also removes the previously queued recurring failed-config background writes. V4.11 serializes scan start/stop with the NimBLE host callbacks, disables the affected independent scan-response timer while retaining active scanning, and corrects the GW-BX5600 font packet length and transaction order. Its verification is recorded in `docs/V4.11-review.md`; physical watch/device acceptance is still required. V4.10 derives a stable setup SSID before AP-start events, checks AP readiness and retries failed starts without writing configuration. V4.9 fixes the V4.8 cold setup boot assertion by avoiding SNTP shutdown before its client/network startup. V4.8 introduced Wi-Fi/NTP recovery, Settings power controls and clearer watch delivery. See `docs/V4.12-review.md` for battery evidence, `docs/V4.11-review.md` for scan/font evidence and `docs/SESSION_HANDOFF.md` for current continuation instructions. `docs/V4.10-review.md` records the previous release checks. `docs/V4.5-review.md`, `docs/V4.2-review.md` and `docs/V3.5-review.md` record earlier changes and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
 
+## V4.15 features and reliability corrections
+
+This version addresses all nine findings from the [additional R2 review](docs/V4.14-R2-post-publication-review.md):
+
+- Initial NTP acquisition and large-correction recovery require three consistent replies spanning at least 30 seconds. Provisional time keeps LF/BT delivery off; a bad initial anchor can be reacquired promptly instead of rejecting correct time for weeks.
+- Scanner, client and controller shutdown share a bounded progress deadline, including failures without a connected watch. RF remains off until controller shutdown is confirmed; unrecoverable host stalls use safe fault recovery.
+- HTTP headers/body sizes and total request duration are bounded before large allocation. Slow or disrupted form/JSON clients cannot reset the body timeout indefinitely.
+- Active Bluetooth work cancels on lost clock confidence, and both protocols recheck before sampling and delivering final TIME.
+- Timer recovery has a bounded current budget that replenishes after 30 minutes of verified healthy interrupts/task progress; lifetime diagnostic counts remain separate.
+- Saved configuration is validated as a complete candidate, with strict numeric/boolean/enum fields and versioned CRC32 integrity. Valid legacy settings load without a migration write; the next actual settings/binding save upgrades them. Corrupt files are retained for explicit recovery.
+- Wi-Fi power shutdown checks desired and observed state, retains access/NTP if Off fails while connected, and retries with bounded backoff. Faults remain in RAM.
+- Drift measurements aggregate short NTP intervals, so uncertainty and wake frequency can recover after a jitter sample.
+- Wi-Fi SSIDs are limited to the ESP32’s 32 UTF-8 bytes in the UI, API and stored-settings validation.
+
+Watch (BLE) now displays the last four successful or failed BT attempts per selected watch from a fixed 224-byte RAM store, clearing on reboot or watch replacement. No additional history is written to flash. Overview and Diagnostics share hours/minutes/seconds uptime formatting.
+
+Clock acquisition, Wi-Fi power faults and timer retry budgets are available in Diagnostics. All eight sidebar pages, RF encoding/timing, watch packet formats, optional font/battery work, LED behavior and minimal flash-write policy are retained. Install all three included libraries when upgrading; normal uploads should preserve saved settings.
+
 ## Build status
 
-V4.14 R2 validation and the required final reliability review are recorded in [docs/V4.14-R2-review.md](docs/V4.14-R2-review.md), with exact release build/test evidence captured before publication. Fault tests exercise allocation/storage failures, late RF commands, network outages, NTP trust, callback teardown, progress recovery and long uptime. The cloud compile also checks the actual ELF crash-gate call path. No physical ESP32/watch is attached to the cloud; host checks and a successful compile cannot establish years of hardware reliability. The user's README update reports that font changes now work.
+V4.15’s pre-publication reliability review and focused fault tests are recorded in [docs/V4.15-review.md](docs/V4.15-review.md). Following the requested workflow, source is published before the complete suite; full test/browser/Node32s compile results are added to the release notes afterward. A failed complete check requires a reviewed and published numbered revision. Physical ESP32/watch soak and fault acceptance remain necessary; no physical device is attached to the cloud.
 
 ## Credits and provenance
 
@@ -184,6 +206,7 @@ Those copyright notices remain in the firmware headers. V4.14 preserves the V4.1
 The project also uses these libraries and platforms:
 
 - [Arduino-ESP32](https://github.com/espressif/arduino-esp32) — Espressif's Arduino platform and its Wi-Fi, WebServer, LittleFS, timer, and LEDC integrations.
+- **RadioBoundedWebServer** — included, source-pinned derivative of Arduino-ESP32 3.3.12 WebServer by Ivan Grokhotkov, Hristo Gochkov and Espressif contributors. Its checked request/response bounds are project changes; original LGPL 2.1-or-later notices, license, upstream hashes and patch are retained.
 - [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) — the NimBLE-based Bluetooth stack maintained by h2zero and contributors, building on Apache Mynewt NimBLE.
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) — JSON parsing and serialization by Benoît Blanchon and contributors.
 - [Arduino CLI](https://github.com/arduino/arduino-cli) — reproducible cloud builds and dependency installation.

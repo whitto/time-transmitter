@@ -1,0 +1,60 @@
+test_boot_config_file_and_line_bounds (test_storage_reliability.StorageReliabilityTest.test_boot_config_file_and_line_bounds) ... Actual boot config: bounded file/lines, binary/truncated rejection, preserved corrupt records and legacy records passed
+ok
+test_bounded_writer_edges (test_storage_reliability.StorageReliabilityTest.test_bounded_writer_edges) ... Bounded config writer: exact capacity, zero capacity, integer extrema, line count and newline injection passed
+ok
+test_checked_config_and_explicit_retry (test_storage_reliability.StorageReliabilityTest.test_checked_config_and_explicit_retry) ... Actual config saves: bounded complete format, seven storage faults, exact readback, explicit retry and no recurring writes passed
+ok
+test_fault_paths_under_sanitizers (test_storage_reliability.StorageReliabilityTest.test_fault_paths_under_sanitizers) ... Bounded config writer: exact capacity, zero capacity, integer extrema, line count and newline injection passed
+Actual config saves: bounded complete format, seven storage faults, exact readback, explicit retry and no recurring writes passed
+Actual boot config: bounded file/lines, binary/truncated rejection, preserved corrupt records and legacy records passed
+Actual config candidate: strict semantic fields, all-byte CRC corruption/truncation, OOM safe defaults and RAM-only legacy migration passed
+Actual schedule saves: allocator failure, partial JSON, invalid entries/counts, seven storage faults and empty/max lists passed
+Actual mount/recovery: mount preserves flash, confirmed fault-only AP formatting, pause/format failures and restart passed
+ok
+test_preserved_mount_and_explicit_recovery (test_storage_reliability.StorageReliabilityTest.test_preserved_mount_and_explicit_recovery) ... Actual mount/recovery: mount preserves flash, confirmed fault-only AP formatting, pause/format failures and restart passed
+ok
+test_schedule_oom_and_partial_record (test_storage_reliability.StorageReliabilityTest.test_schedule_oom_and_partial_record) ... Actual schedule saves: allocator failure, partial JSON, invalid entries/counts, seven storage faults and empty/max lists passed
+ok
+test_strict_fields_integrity_and_no_idle_migration (test_storage_reliability.StorageReliabilityTest.test_strict_fields_integrity_and_no_idle_migration) ... Actual config candidate: strict semantic fields, all-byte CRC corruption/truncation, OOM safe defaults and RAM-only legacy migration passed
+ok
+test_real_led_task_and_activity (test_activity_led.ActivityLedTest.test_real_led_task_and_activity) ... Actual LED task: BT-only flashing, 24-hour UTC success, failure/off override, RF isolation and rollover passed
+ok
+test_saved_led_and_default_bt_settings (test_activity_led.ActivityLedTest.test_saved_led_and_default_bt_settings) ... LED saved before ACK, legacy defaults, explicit Off reboot retention and all flash-failure rollbacks passed
+ok
+test_shared_c3_envelope_pin_has_no_activity_owner (test_activity_led.ActivityLedTest.test_shared_c3_envelope_pin_has_no_activity_owner) ... ok
+test_rf_save_preserves_bt_settings (test_schedule_persistence.SchedulePersistenceTest.test_rf_save_preserves_bt_settings) ... Real RF-save preserves Bluetooth settings; every daily slot listens, durable edits/rollback and reboot retention passed
+ok
+test_actual_config_and_panic_policy (test_crash_dump_config.CrashDumpConfigTest.test_actual_config_and_panic_policy) ... Actual crash setting: default Off, durable On/Off, legacy defaults, unsupported core and all storage rollbacks passed
+ok
+test_half_open_daily_bounds (test_wifi_access_schedule.WifiAccessScheduleTest.test_half_open_daily_bounds) ... Daily Wi-Fi bounds: exhaustive civil-minute comparisons and invalid inputs passed
+ok
+test_real_access_configuration_is_durable_and_rolls_back (test_wifi_access_schedule.WifiAccessScheduleTest.test_real_access_configuration_is_durable_and_rolls_back) ... Real daily Wi-Fi config: strict validation, durable save/load, legacy defaults and atomic failure rollback passed
+ok
+test_real_access_timezone_and_daily_recurrence (test_wifi_access_schedule.WifiAccessScheduleTest.test_real_access_timezone_and_daily_recurrence) ... Actual daily Wi-Fi access conversion: recurring/overnight windows, independent zones and DST passed
+ok
+test_real_power_management_preserves_existing_exceptions (test_wifi_access_schedule.WifiAccessScheduleTest.test_real_power_management_preserves_existing_exceptions) ... Actual Wi-Fi power decisions preserve AP/association, boot/recovery grace, NTP wakes and daily access
+ok
+test_real_history_outcomes_storage_and_retention (test_bt_history.BtHistoryTest.test_real_history_outcomes_storage_and_retention) ... Real sync outcome hooks: immediate first save, later success/failure RAM only, reboot counters/LED evidence, midnight and rollback passed
+Real retention toggle: durable Off, RAM-only data, no config-history leak, stale-generation suppression and preserved daily quota passed
+Saved delivery remains historical; replacement addresses/protocols cannot inherit profile completion or battery
+Real loader ignores truncated, oversized, CRC-corrupt and semantically invalid snapshots without writes
+Real history save failure (open) keeps prior snapshot, time success and one attempt/day; next day recovers
+Real history save failure (short) keeps prior snapshot, time success and one attempt/day; next day recovers
+Real history save failure (readback) keeps prior snapshot, time success and one attempt/day; next day recovers
+Real history save failure (rename) keeps prior snapshot, time success and one attempt/day; next day recovers
+ok
+test_snapshot_and_daily_quota (test_bt_history.BtHistoryTest.test_snapshot_and_daily_quota) ... Brisbane calendar-day quota: midnight, reboot, disable/re-enable, failed attempt and clock rollback passed
+Compact 168-byte snapshot preserves counters, UTC timestamps and watch identity; every single-bit corruption rejected
+Malformed schema, epoch, quota, profile, protocol and address fields rejected; unset profiles retained
+ok
+test_font_and_power_flash_routes (test_watch_options.WatchOptionsTest.test_font_and_power_flash_routes) ... Per-profile font and power settings persist, validate inputs and roll back failed flash writes
+ok
+test_font_transaction_against_github_packets (test_watch_options.WatchOptionsTest.test_font_transaction_against_github_packets) ... Captured 12-byte and webapp 17-byte font packets preserved; read/write/readback precedes fresh TIME; font failures stay separate
+ok
+test_power_controller_windows_and_failures (test_watch_options.WatchOptionsTest.test_power_controller_windows_and_failures) ... Idle controller power saving wakes for manual/daily windows, honors Always Wait and retains RF exclusion on failures
+ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 25.611s
+
+OK

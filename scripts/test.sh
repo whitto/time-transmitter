@@ -13,6 +13,8 @@ python3 tests/test_network_reliability.py
 python3 tests/test_wifi_access_schedule.py
 python3 tests/test_bluetooth_workflow.py
 python3 tests/test_bt_history.py
+python3 tests/test_bt_recent_syncs.py
+python3 tests/test_recent_sync_ui.py
 python3 tests/test_crash_dump_gate.py
 python3 tests/test_crash_dump_config.py
 python3 tests/test_schedule_persistence.py
@@ -20,6 +22,7 @@ python3 tests/test_storage_reliability.py
 python3 tests/test_activity_led.py
 python3 tests/test_json_writer.py
 python3 tests/test_api_reliability.py
+python3 tests/test_http_bounds.py
 python3 tests/test_watch_options.py
 python3 tests/test_watch_battery.py
 python3 tests/test_rf_handoff.py

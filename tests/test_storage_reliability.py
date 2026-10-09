@@ -16,6 +16,7 @@ static void clearFaults() {
   writeOpenOk = readbackOpenOk = renameOk = true;
   shortWrite = shortRead = corruptReadback = wrongReadbackSize = false;
   failJsonAllocation = false; testJsonCapacity = 8192;
+  failStringReserve = false;
 }
 static void boundedWriter() {
   char bytes[32];
@@ -106,6 +107,112 @@ static void configBootBounds() {
   assert(std::strcmp(ssid, "Saved network") == 0);
   std::puts("Actual boot config: bounded file/lines, binary/truncated rejection, preserved corrupt records and legacy records passed");
 }
+static std::vector<std::string> configFields(const std::string &record) {
+  std::vector<std::string> fields;
+  size_t position=record.find('\n')+1;
+  while (position<record.size()) {
+    const size_t end=record.find('\n',position);
+    const auto line=record.substr(position,end-position);
+    if (line.rfind("CRC32:",0)==0) break;
+    fields.push_back(line); position=end+1;
+  }
+  assert(fields.size()==RadioConfigFormat::FIELD_COUNT); return fields;
+}
+static std::string configBytes(const std::vector<std::string> &fields, bool sealed) {
+  char buffer[2048]; RadioConfigWriter writer(buffer,sizeof(buffer));
+  if (sealed) assert(writer.line(RadioConfigFormat::MAGIC));
+  for (const auto &field:fields) assert(writer.line(field.c_str()));
+  if (sealed) assert(writer.seal(fields.size()));
+  else assert(writer.complete(fields.size()));
+  return {buffer,writer.size()};
+}
+static void rejectStoredConfig(const std::string &record) {
+  const auto writesBefore=writeOpens;
+  flash[CONFIG_FILE]=record; configStorageFault=false;
+  std::strcpy(ssid,"Unsafe retained RAM settings"); full_time_tx=true;
+  btSyncTimes[0]=1000; btTimezoneName="Europe/London";
+  loadConfig();
+  assert(configStorageFault && !ssid[0] && !passwd[0] && !full_time_tx);
+  assert(btSyncTimes[0]==30 && btTimezoneName==DEFAULT_BT_TIMEZONE);
+  assert(flash.at(CONFIG_FILE)==record && writeOpens==writesBefore && formats==0);
+  saveConfig(); for (int i=0;i<20;++i) { tick+=3001; servicePendingConfigSave(); }
+  assert(writeOpens==writesBefore && !configDirty);
+}
+static void configIntegrityAndSemantics() {
+  clearFaults(); configDefaults(); std::strcpy(ssid,"Validated network");
+  btSyncTimes[0]=630; btSyncProfile[1]=3; btManualProfile=3;
+  btProfileAddress[3]="aA:bB:00:11:22:33"; btProfileName[3]="Watch é";
+  btFontMode[3]=2; btTimeOffsetMinutes=-720; transmission_offset_minutes=840;
+  btHistoryGeneration=UINT32_MAX; wifiAccessEnabled=true;
+  wifiAccessStart=1380; wifiAccessEnd=60; wifiAccessTimezone="UTC";
+  assert(writeConfigNow());
+  const auto original=flash.at(CONFIG_FILE);
+  const auto fields=configFields(original);
+  configDefaults(); loadConfig();
+  assert(!configStorageFault && std::strcmp(ssid,"Validated network")==0);
+  assert(btSyncTimes[0]==630 && btSyncProfile[1]==3 && btManualProfile==3);
+  assert(btProfileAddress[3]=="aA:bB:00:11:22:33" && btProfileName[3]=="Watch é" && btFontMode[3]==2);
+  assert(btTimeOffsetMinutes==-720 && transmission_offset_minutes==840 && btHistoryGeneration==UINT32_MAX);
+  assert(wifiAccessEnabled && wifiAccessStart==1380 && wifiAccessEnd==60 && wifiAccessTimezone=="UTC");
+  // Every interrupted versioned write and every one-bit stored corruption
+  // fails before live settings are applied; the previous bytes are retained.
+  for (size_t i=0;i<original.size();++i) rejectStoredConfig(original.substr(0,i));
+  for (size_t i=0;i<original.size();++i) {
+    auto damaged=original; damaged[i]^=1; rejectStoredConfig(damaged);
+  }
+  rejectStoredConfig(original+"extra\n");
+  auto unsupported=original; unsupported.replace(unsupported.find("_V1"),3,"_V2"); rejectStoredConfig(unsupported);
+  const std::vector<std::pair<size_t,std::string>> malformed = {
+    {0,std::string(33,'S')},{1,std::string(64,'P')},{2,"Missing/Zone"},{3,"yes"},{4,"7"},
+    {5,"841"},{6,"2"},{7,"2"},{11,"2026junk"},{12,"366"},{13,"2026-02-29"},
+    {14,"3"},{18,"-1"},{19,"2026"},{20,"365"},{23,"630junk"},{24,"1440"},
+    {25,"+630"},{26,"2147483648"},{27,"4"},{31,"-1"},{32,"0"},{33,"-2"},
+    {40,"zz:bb:cc:dd:ee:ff"},{41,"aa-bb-cc-dd-ee-ff"},{44,std::string(48,'W')},
+    {48,"on"},{49,"3"},{53,"Moon/Base"},{54,"-721"},{55,"2"},{56,"3"},
+    {60,"yes"},{61,"2"},{62,"4294967296"},{62,"-1"},{62,"123junk"},
+    {63,"2"},{64,"1440"},{65,"1380"},{66,"Moon/Base"},{67,"yes"}
+  };
+  for (const auto &edit:malformed) {
+    auto bad=fields; bad[edit.first]=edit.second;
+    rejectStoredConfig(configBytes(bad,true)); // Valid CRC cannot bypass semantic checks.
+    rejectStoredConfig(configBytes(bad,false)); // Includes the reported 630junk legacy bug.
+  }
+  for (size_t i : {size_t(3),size_t(4),size_t(23),size_t(53),size_t(62),size_t(67)}) {
+    auto bad=fields; bad[i]=""; rejectStoredConfig(configBytes(bad,true));
+  }
+  flash[CONFIG_FILE]=original; failStringReserve=true;
+  rejectStoredConfig(original); failStringReserve=false;
+  // Legacy conversion is strictly bounded and RAM-only. It is sealed once,
+  // at the next explicit configuration save, never by idle/startup migration.
+  flash[CONFIG_FILE]=configBytes(fields,false); configStorageFault=false;
+  const auto writesBefore=writeOpens; loadConfig();
+  assert(!configStorageFault && btSyncTimes[0]==630 && btHistoryGeneration==UINT32_MAX);
+  for (int i=0;i<100;++i) { tick+=3001; servicePendingConfigSave(); }
+  assert(writeOpens==writesBefore && flash.at(CONFIG_FILE)==configBytes(fields,false));
+  assert(writeConfigNow() && writeOpens==writesBefore+1);
+  assert(flash.at(CONFIG_FILE).rfind(RadioConfigFormat::MAGIC,0)==0);
+  // The original numeric timezone forms and CRLF/no-final-newline records
+  // remain accepted without rewriting flash.
+  const char *zones[][2]={{"32400","Asia/Tokyo"},{"36000","Australia/Brisbane"},
+    {"39600","Australia/Sydney"},{"28800","Asia/Shanghai"},{"0","Europe/London"},
+    {"-18000","America/New_York"},{"-28800","America/Los_Angeles"}};
+  for (const auto &zone:zones) {
+    flash[CONFIG_FILE]=std::string("Legacy network\r\nLegacy password\r\n")+zone[0];
+    const auto before=writeOpens; loadConfig(); assert(!configStorageFault && timezone_name==zone[1]);
+    assert(writeOpens==before);
+  }
+  flash[CONFIG_FILE]="RADIOCLOCK_CONFIG_V1\npassword\nAsia/Tokyo\n";
+  loadConfig(); assert(!configStorageFault && !std::strcmp(ssid,"RADIOCLOCK_CONFIG_V1"));
+  flash[CONFIG_FILE]="RADIOCLOCK_CONFIG_V2\npassword\nAsia/Tokyo\n";
+  loadConfig(); assert(!configStorageFault && !std::strcmp(ssid,"RADIOCLOCK_CONFIG_V2"));
+  int32_t integer=0; uint32_t generation=0;
+  assert(RadioConfigRecord::signedInteger("-2147483648",INT32_MIN,INT32_MAX,integer) && integer==INT32_MIN);
+  assert(!RadioConfigRecord::signedInteger("-2147483649",INT32_MIN,INT32_MAX,integer));
+  assert(!RadioConfigRecord::signedInteger("",INT32_MIN,INT32_MAX,integer));
+  assert(RadioConfigRecord::unsignedInteger("4294967295",generation) && generation==UINT32_MAX);
+  assert(!RadioConfigRecord::unsignedInteger("4294967296",generation));
+  std::puts("Actual config candidate: strict semantic fields, all-byte CRC corruption/truncation, OOM safe defaults and RAM-only legacy migration passed");
+}
 static void scheduleFaults() {
   const std::string previous = "[{\"station\":0,\"start\":390,\"end\":395}]";
   flash[STATION_CONFIG_FILE] = previous;
@@ -172,6 +279,7 @@ int main(int argc, char **argv) {
   if (!std::strcmp(argv[1], "writer")) boundedWriter();
   else if (!std::strcmp(argv[1], "config")) configFaults();
   else if (!std::strcmp(argv[1], "boot")) configBootBounds();
+  else if (!std::strcmp(argv[1], "integrity")) configIntegrityAndSemantics();
   else if (!std::strcmp(argv[1], "schedules")) scheduleFaults();
   else if (!std::strcmp(argv[1], "mount")) mountRecovery();
   else return 2;
@@ -210,6 +318,9 @@ struct FaultAllocator {
 };
 using FaultJsonDocument = ArduinoJson::BasicJsonDocument<FaultAllocator>;
 struct File {''')
+        mocks = mocks.replace('class String {', 'bool failStringReserve=false;\nclass String {')
+        mocks = mocks.replace('bool reserve(size_t n) { s.reserve(n); return true; }',
+                              'bool reserve(size_t n) { if (failStringReserve) return false; s.reserve(n); return true; }')
         mocks = mocks.replace('return contents ? contents->size() : 0;',
                               'return contents ? contents->size() + (wrongReadbackSize ? 1 : 0) : 0;')
         mocks = mocks.replace('position += count; return count;',
@@ -256,6 +367,9 @@ struct File {''')
     def test_boot_config_file_and_line_bounds(self):
         subprocess.run([str(self.binary), 'boot'], check=True)
 
+    def test_strict_fields_integrity_and_no_idle_migration(self):
+        subprocess.run([str(self.binary), 'integrity'], check=True)
+
     def test_schedule_oom_and_partial_record(self):
         subprocess.run([str(self.binary), 'schedules'], check=True)
 
@@ -264,7 +378,7 @@ struct File {''')
 
     def test_fault_paths_under_sanitizers(self):
         environment = dict(os.environ, ASAN_OPTIONS='detect_leaks=1:abort_on_error=1')
-        for case in ['writer', 'config', 'boot', 'schedules', 'mount']:
+        for case in ['writer', 'config', 'boot', 'integrity', 'schedules', 'mount']:
             subprocess.run([str(self.sanitized), case], check=True, env=environment)
 
 

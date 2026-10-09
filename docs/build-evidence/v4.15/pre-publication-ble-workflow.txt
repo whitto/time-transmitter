@@ -1,0 +1,16 @@
+test_final_time_rechecks_trust_after_battery_font_connect_and_sample (test_bluetooth_workflow.BluetoothWorkflowTest.test_final_time_rechecks_trust_after_battery_font_connect_and_sample) ... Actual BX/standard TIME is withheld after lost clock trust; normal disconnect unwinds all paths
+ok
+test_real_firmware_workflow (test_bluetooth_workflow.BluetoothWorkflowTest.test_real_firmware_workflow) ... BLE workflow, explicit pairing, HTTP retry, protocol persistence and fail-closed RF shutdown passed
+Failed BLE initialization retains RF exclusion and recovers after controller shutdown
+Midnight/New Year windows retain target-day identity and reopen for the next daily occurrence
+No-client scan host stall reaches one retained shutdown deadline with RF gated
+Repeated full/partial/idle controller shutdown errors reach the same bounded deadline
+Repeated full/partial/idle controller shutdown errors reach the same bounded deadline
+Repeated full/partial/idle controller shutdown errors reach the same bounded deadline
+Common shutdown deadline remains bounded across millis rollover
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 3.754s
+
+OK

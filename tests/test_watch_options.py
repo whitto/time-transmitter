@@ -47,6 +47,8 @@ String btLastWatchName="CASIO GW-BX5600", btProfileName[4], btFontLastStatus;
 const char *btGattStage="idle", *btDeliveryEvidence="none";
 int btResponseErrors=0, timeWrites=0, fontWrites=0, requests=0, disconnects=0;
 bool cancelled=false, failWrite=false, failWait=false, corruptReadback=false;
+bool trustedClock=true;
+bool clockTrusted() { return trustedClock; }
 bool invalidReply=false, missingByte=false, badLength=false, oversizedReply=false;
 bool overflowReply=false, changedReadbackLength=false, corruptOtherSetting=false;
 portMUX_TYPE btResponseMux=0;

@@ -58,7 +58,9 @@ int main() {
   assert(flash.at(CONFIG_FILE) == offConfig);
   RadioCrashDumpGate::gateAvailable = true;
   // V4.13 and older files have no last-line preference: always default Off.
-  flash[CONFIG_FILE] = onConfig.substr(0, onConfig.size() - 2);
+  auto legacyConfig = onConfig.substr(onConfig.find('\n')+1);
+  legacyConfig.erase(legacyConfig.rfind("CRC32:"));
+  flash[CONFIG_FILE] = legacyConfig.substr(0,legacyConfig.size()-2);
   crashDumpEnabled = true; RadioCrashDumpGate::gateEnabled = true;
   loadConfig(); assert(!crashDumpEnabled && !RadioCrashDumpGate::gateEnabled);
   assert(wifiAccessEnabled && wifiAccessStart == 1080 && wifiAccessEnd == 1200);

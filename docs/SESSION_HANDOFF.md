@@ -1,33 +1,33 @@
 # Time Transmitter / RadioClock — session handoff
 
-Updated on **9 October 2026**, using the user's **Australia/Brisbane** timezone.
+Updated on **10 October 2026**, using the user's **Australia/Brisbane** timezone.
 
 ## Read this first
 
-**Latest status:** V4.14 R2 is published at commit `a727dd64fabebbbc06a22f3d4644b5d7268c0d05`. The post-publication full suite passed 61 cases, browser checks and Node32s compile (1,427,796 bytes flash / 73,056 bytes global RAM); all four source ZIPs match their immutable tags. Diagnostics uptime is hours/minutes/seconds. The additional senior review found nine further issues, explicitly queued by the user in `docs/NEXT_VERSION.md`; see `docs/V4.14-R2-post-publication-review.md`. Do not silently apply that queue as a documentation update. Future workflow: reliability review before publication, full changelog and source published first, full suite afterward, numbered revision if failures occur. MeshCore messages are unrelated and must be ignored in this session.
+**Latest status:** V4.15 build R1 implements all nine additional findings from the V4.14 R2 senior review, explicitly authorized by the user. The Watch page also shows the last four successful or failed attempts per selected watch in fixed RAM only, and both uptime displays use hours/minutes/seconds. Source publication and the complete post-publication suite are still pending; check release notes for the final result. Read `docs/V4.15-review.md` for focused fault evidence and remaining physical limits. The nine items are marked implemented in `docs/NEXT_VERSION.md`; the original R2 report remains historical evidence.
 
-This is maintenance of the user's own ESP32 watch transmitter. The current request is **V4.14 build R2**: implement all recommendations from the earlier long-run reliability review, finish validation and publish source, then perform an additional full review. The user explicitly authorized these working-function changes. Preserve BT LED/daily minimal status/Wi-Fi access, battery/font behavior, project links and the approved eight-item sidebar. Future code/features require a fresh embedded reliability review **before publishing**, recorded in `AGENTS.md`. Essential settings/status remain the only normal flash records, with separately optional default-Off crash dumps.
+Use active sketch `firmware/RadioClock_V4_15/RadioClock_V4_15.ino` and all three included libraries: NimBLE-Arduino 2.5.1-radioclock.1, RadioCrashDumpGate 1.0.0 and RadioBoundedWebServer 3.3.12-radioclock.1. Normal upgrades retain saved settings. Initial/reacquired NTP trust now needs three consistent replies spanning at least 30 seconds; RF/BT stay off while provisional. Legacy configuration upgrades to a versioned CRC record only on an actual settings/binding save, with no boot/idle migration write. Preserve the eight-item sidebar, RF packet timing and watch protocol/font/battery/LED/history behavior.
 
-**Status at handoff: R2 is published and the complete post-publication suite passed. Nine additional senior-review findings are queued for future updates.** Original R1 results are historical and cannot be reused as R2 counts, sizes or hashes. The implemented fixes cover storage/OOM safety, pinned NimBLE shutdown and allocation faults, BT deadlines, nonblocking network recovery, trust-driven NTP wakes, ownership-safe RF commands, timing/progress recovery, checked JSON, rollover and conservative clock confidence. No physical ESP32/watch is attached to the cloud.
+Future workflow: fresh reliability review before publication; full changelog and source published first; full suite afterward; numbered revision if failures occur. No physical ESP32/watch is attached to the cloud. MeshCore messages are unrelated and must be ignored.
 
-Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.14-R2-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
+Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.15-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
 
 ## Repository and current release
 
 - Repository: <https://github.com/whitto/time-transmitter>.
 - Cloud checkout: `/workspace/time-transmitter`, branch `main`.
-- Source release: **V4.14 build R2**, new tag `v4.14-r2`; resolve its published commit with `git rev-parse v4.14-r2^{commit}`. Historical R1 tags remain unchanged.
+- Source release: **V4.15 build R1**, tag `v4.15`; resolve its published commit with `git rev-parse v4.15^{commit}`. Historical tags remain unchanged.
 - Previous V4.11 release commit: `9edbdc2462b76757cabba9ca689e62689c6e93b8`.
-- V4.14 R2 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.14-r2>.
-- V4.14 R2 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.14-r2.zip>.
-- Arduino sketch and helper: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.14-r2.zip>.
+- V4.15 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.15>.
+- V4.15 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15.zip>.
+- Arduino sketch and all three libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15.zip>.
 - RadioCrashDumpGate library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip>.
 - Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/main/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.
 - V4.10 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.10>.
 - V4.10 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.10.zip>.
-- Current active source: `firmware/RadioClock_V4_14/RadioClock_V4_14.ino`; previous version folders/reviews are retained unchanged.
-- Keep the complete 14-file sketch folder (eleven headers) and both source libraries: `libraries/RadioCrashDumpGate` and the patched `libraries/NimBLE-Arduino`. Keep the five crash-gate files including its linker metadata/marker. Replace plain/duplicate NimBLE 2.5.1 with **2.5.1-radioclock.1**; the firmware rejects an unpatched build. The Arduino archive includes all three complete folders and no compiled binaries. Patched-library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip>. Check `git status` and actual diffs before editing; later work may have progressed.
+- Current active source: `firmware/RadioClock_V4_15/RadioClock_V4_15.ino`; previous version folders/reviews are retained unchanged.
+- Keep the complete 15-file sketch folder (twelve headers) and all three source libraries: `libraries/RadioCrashDumpGate`, the patched `libraries/NimBLE-Arduino`, and `libraries/RadioBoundedWebServer`. Keep the five crash-gate files including its linker metadata/marker. Replace plain/duplicate NimBLE 2.5.1 with **2.5.1-radioclock.1**; the firmware rejects an unpatched build. The Arduino archive includes all four complete folders and no compiled binaries. Patched-library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/nimble-v2.5.1-radio-r2.zip>. Check `git status` and actual diffs before editing; later work may have progressed.
 - UI source: `ui/radioclock.html`; approved layout reference: `ui/v32_ui_mockup.png`.
 - The previous V4.11 ZIP was downloaded and verified against all 162 tracked release files. Repeat that verification for each published version, including the Arduino-source-only ZIP.
 
@@ -174,7 +174,7 @@ The optional 64 KB core-dump partition restored in R1 remains; app/LittleFS addr
 
 ## Build and verification workflow
 
-Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all eleven active sketch companion headers and `partitions.csv` beside the `.ino`, and install the included RadioCrashDumpGate and patched NimBLE source libraries. Cloud compile scripts install it automatically.
+Use the existing checkout and retained toolchain. Do not create a worktree unless requested. Keep all twelve active sketch companion headers and `partitions.csv` beside the `.ino`, and install the included RadioCrashDumpGate, patched NimBLE and RadioBoundedWebServer source libraries. Cloud compile scripts install it automatically.
 
 ```bash
 cd /workspace/time-transmitter
@@ -187,7 +187,7 @@ node scripts/test-ui-browser.cjs
 RADIOCLOCK_FQBN='esp32:esp32:node32s:PartitionScheme=no_ota,FlashFreq=40' bash scripts/compile.sh
 ```
 
-Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_14`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. Keep existing scan/history/Wi-Fi-window regressions and V4.14's `tests/test_crash_dump_gate.py` in the normal runner. R1 reproduction sources under `docs/build-evidence/v4.14` preserve the old failures. Current fault regressions live in `tests/`; final R2 evidence belongs under `docs/build-evidence/v4.14-r2`. Run the reliability review before publication and the additionally requested full review afterward.
+Tool storage: `/workspace/.radioclock-tools`. Build outputs: `/workspace/.radioclock-tools/output/RadioClock_V4_15`. Browser checks need Playwright/Chromium; use the existing installation and set `RADIOCLOCK_CHROMIUM` if required. Keep existing scan/history/Wi-Fi-window regressions and V4.14's `tests/test_crash_dump_gate.py` in the normal runner. R1 reproduction sources under `docs/build-evidence/v4.14` preserve the old failures. Current fault regressions live in `tests/`; final R2 evidence belongs under `docs/build-evidence/v4.14-r2`. Run the reliability review before publication and the additionally requested full review afterward.
 
 Before release, retain test/compiler/image evidence, record hashes of tested source, review the scope against the previous release, and inspect the actual rendered page against the approved sidebar mockup. The new version must be consistent in the sketch path, firmware label, UI, scripts and README.
 

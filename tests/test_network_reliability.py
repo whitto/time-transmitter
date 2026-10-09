@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fault/recovery checks using the actual V4.14 network policy functions."""
+"""Fault/recovery checks using the actual V4.15 network policy functions."""
 import shutil
 import subprocess
 import tempfile
@@ -109,6 +109,38 @@ int main() {
   assert(wifiStaRetryDelayMs==WIFI_RETRY_MAX_MS);
   WiFi.connection=WL_CONNECTED;immediateReply=true;checkWiFiConnection();
   assert(!ap_mode && ntpsync==1 && !radioPaused && wifiStaRetryDelayMs==30000);
+
+  // The reproduced connected-but-unserviced failure now retains web/SNTP
+  // and reports desired Off separately from the actual station mode.
+  setupPowerSave();ntpEnabled=true;WiFi.disconnectOk=WiFi.offModeOk=false;
+  powerTick();
+  assert(!wifiRadioEnabled && wifiPowerShutdownPending && wifiPowerFault);
+  assert(WiFi.getMode()==WIFI_STA && WiFi.status()==WL_CONNECTED);
+  assert(webServerStarted && ntpEnabled && wifiPowerFaultCount==1);
+  const int shutdowns=WiFi.disconnects;
+  for(int i=0;i<100;++i) { checkWiFiConnection();assert(!ntpstop()); }
+  assert(WiFi.disconnects==shutdowns && webServerStarted && ntpEnabled);
+  // Every failed attempt has a deadline; the backoff caps at one minute.
+  for(int i=0;i<12;++i) {
+    monoOffsetMs=wifiPowerRetryAtMs-(uint64_t)tick;
+    assert(!ntpstop() && wifiPowerShutdownPending && wifiPowerFault);
+    assert(wifiPowerRetryDelayMs<=WIFI_POWER_RETRY_MAX_MS);
+    assert(webServerStarted && ntpEnabled);
+  }
+  assert(wifiPowerRetryDelayMs==WIFI_POWER_RETRY_MAX_MS);
+  // Successful observed Off is accepted even if disconnect reported an
+  // error; the SDK mode transition actually disabled the radio.
+  WiFi.offModeOk=true;monoOffsetMs=wifiPowerRetryAtMs-(uint64_t)tick;
+  assert(ntpstop() && WiFi.getMode()==WIFI_OFF && !wifiPowerFault);
+  assert(!wifiPowerShutdownPending && !webServerStarted && !ntpEnabled);
+  // A user/clock window cancels a pending shutdown; stale retry must not
+  // power the newly requested connection back off.
+  setupPowerSave();WiFi.disconnectOk=WiFi.offModeOk=false;powerTick();
+  assert(wifiPowerShutdownPending);
+  WiFi.disconnectOk=WiFi.offModeOk=true;accessWantsWifi=true;powerTick();
+  assert(wifiRadioEnabled && !wifiPowerShutdownPending && wifiConnectionPending);
+  checkWiFiConnection();assert(!wifiPowerFault && webServerStarted && ntpEnabled);
+  tick+=60000;powerTick();assert(wifiRadioEnabled && WiFi.getMode()==WIFI_STA);
   puts("Adaptive independent NTP wakes, bounded failures/recovery, AP retention and 64-bit rollover policy passed");
 }
 '''
@@ -129,7 +161,9 @@ class NetworkReliabilityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='radioclock-network-reliability-') as temporary:
             cpp=Path(temporary)/'network.cpp';binary=Path(temporary)/'network'
             cpp.write_text(unit)
-            subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror','-I',str(workflow.FIRMWARE.parent),str(cpp),'-o',str(binary)],check=True)
+            subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',
+                            '-fsanitize=address,undefined','-fno-omit-frame-pointer','-no-pie',
+                            '-I',str(workflow.FIRMWARE.parent),str(cpp),'-o',str(binary)],check=True)
             subprocess.run([str(binary)],check=True)
 
 if __name__=='__main__':

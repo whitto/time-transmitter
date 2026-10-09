@@ -51,7 +51,7 @@ struct WiFiMock {
   int connection = 0, modeValue = WIFI_AP, begins = 0, reconnects = 0;
   int apCloses = 0, apStarts = 0, disconnects = 0, modes = 0;
   std::vector<int> modeAttempts;
-  bool modeOk=true, offModeOk=true, apCloseOk=true, apConfigOk=true, sleep=false;
+  bool modeOk=true, offModeOk=true, disconnectOk=true, apCloseOk=true, apConfigOk=true, sleep=false;
   bool apEventArrives=true;
   struct { bool ready=true; bool started() const { return ready; } } AP;
   uint32_t apIPValue=0xc0000201;
@@ -65,13 +65,19 @@ struct WiFiMock {
     modeAttempts.push_back(value);
     if (!modeOk || (value==WIFI_OFF && !offModeOk)) return false;
     modeValue=value; AP.ready=false;
+    if (value==WIFI_OFF) connection=0;
     if (value!=WIFI_OFF) networkInitialized=true;
     return true;
   }
   bool setSleep(bool value) { sleep=value; return true; }
   void begin(const char* ssid, const char*) { assert(std::strcmp(ssid,"Cloud")==0); ++begins; }
   void reconnect() { ++reconnects; }
-  void disconnect(bool) { ++disconnects; connection=0; }
+  bool disconnect(bool) {
+    ++disconnects;
+    if (!disconnectOk) return false;
+    connection=0;
+    return true;
+  }
   bool softAPdisconnect(bool disable) {
     assert(disable); ++apCloses;
     if (!apCloseOk) return false;
@@ -110,6 +116,10 @@ bool apStartPending=false;
 uint32_t apStartAttemptMillis=0;
 bool ntpResumePending=false;
 bool wifiRadioEnabled=true, scheduleWantsWifi=false, accessWantsWifi=false;
+bool wifiPowerFault=false, wifiPowerShutdownPending=false;
+uint32_t wifiPowerFaultCount=0, wifiPowerRetryDelayMs=1000;
+uint64_t wifiPowerRetryAtMs=0;
+constexpr uint32_t WIFI_POWER_RETRY_MAX_MS=60000;
 uint32_t wifiRecoveryStarted=0, wifi_connect_start=0, bootMillis=0;
 uint32_t tick=100;
 uint32_t millis() { return tick; }
@@ -184,7 +194,7 @@ void delay(unsigned long value) {
 static bool configureNtpClient();
 static void beginWifiCredentialConnection();
 void ntpstart();
-void ntpstop();
+bool ntpstop();
 void startAPMode();
 void serviceAPStartup();
 bool stopAPMode();
@@ -196,6 +206,8 @@ void reset() {
   wifiStaRetryDelayMs=wifiClockRetryDelayMs=30000;wifiClockWakeSyncCount=0;
   wifiNtpConfigureRetryDelayMs=5000;
   wifiClockWakeActive=false;clockMockAge=0;clockNtpRejected=false;monoOffsetMs=0;
+  wifiPowerFault=wifiPowerShutdownPending=false;wifiPowerFaultCount=0;
+  wifiPowerRetryAtMs=0;wifiPowerRetryDelayMs=1000;
   server.stops=server.starts=0; webServerStarted=true;
   ap_mode=true;wifiConnectionPending=false;wifiRecoveryWindowActive=false;ntpResumePending=false;
   apStartPending=false;apStartAttemptMillis=0;

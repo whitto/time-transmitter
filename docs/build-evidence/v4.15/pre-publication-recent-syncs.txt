@@ -1,0 +1,9 @@
+test_actual_sync_result_hook_keeps_flash_and_identity_isolated (test_bt_recent_syncs.BtRecentSyncsTest.test_actual_sync_result_hook_keeps_flash_and_identity_isolated) ... Actual sync-result hook records real success/failure only; RF deferrals/replacement failures excluded; zero history flash writes
+ok
+test_fixed_ram_ring_order_rollover_identity_and_reset (test_bt_recent_syncs.BtRecentSyncsTest.test_fixed_ram_ring_order_rollover_identity_and_reset) ... RAM history uses 224 fixed bytes: million inserts, newest-four order, identity/profile isolation and reboot reset passed
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 3.597s
+
+OK

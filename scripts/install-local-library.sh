@@ -11,3 +11,4 @@ cp "$library_src/src/RadioCrashDumpGate.h" "$library_dest/src/RadioCrashDumpGate
 cp "$library_src/src/RadioCrashDumpGate.cpp" "$library_dest/src/RadioCrashDumpGate.cpp"
 cp "$library_src/src/esp32/README.md" "$library_dest/src/esp32/README.md"
 python3 "$repo_dir/scripts/install-pinned-nimble.py"
+python3 "$repo_dir/scripts/install-bounded-webserver.py"
