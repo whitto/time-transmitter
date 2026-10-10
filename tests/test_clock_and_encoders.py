@@ -70,8 +70,12 @@ std::atomic<int> ntpsync{1};
 uint64_t mockMonoUs = 1000000;
 int64_t esp_timer_get_time() { return mockMonoUs; }
 int64_t restoredEpochUs = 0;
+unsigned clockCommitCalls = 0;
+extern std::atomic<uint32_t> radioClockStepGeneration;
 bool setTimeOk = true;
 int fakeSetTime(const struct timeval* tv, const void*) {
+  assert(radioClockStepGeneration.load() & 1U);
+  ++clockCommitCalls;
   if (!setTimeOk) return -1;
   restoredEpochUs = (int64_t)tv->tv_sec*1000000 + tv->tv_usec; return 0;
 }
@@ -160,6 +164,7 @@ void testTimezoneIsolation() {
   assert(after.tm_hour == 1 && after.tm_mday == 4);
 }
 void resetClock() {
+  radioClockStepGeneration = 0; clockCommitCalls = 0;
   ntpLastMonoUs = 0; ntpLastEpochUs = 0;
   ntpDriftPpm = 0; ntpDriftAbsSecPerHour = 0;
   clockNtpEverSynced = false; clockNtpSyncCount = 0;
@@ -175,10 +180,15 @@ void resetClock() {
   sdkNextTimeoutMs = 0; ntpRestarts = 0;
 }
 void receiveReply(int64_t epochUs) {
+  const uint32_t generationBefore = radioClockStepGeneration.load();
+  const unsigned commitsBefore = clockCommitCalls;
   struct timeval tv{(time_t)(epochUs/1000000), (suseconds_t)(epochUs%1000000)};
   // The pinned lwIP sntp_recv calls sntp_process / the notification
   // before it reads SNTP_UPDATE_DELAY to arm its next request.
   sntp_sync_time(&tv);
+  assert(!(radioClockStepGeneration.load() & 1U));
+  assert(radioClockStepGeneration.load() == generationBefore +
+      (clockCommitCalls == commitsBefore ? 0U : 2U));
   sdkNextTimeoutMs = sdkIntervalMs;
 }
 void establishClock(int64_t epoch) {

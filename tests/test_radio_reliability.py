@@ -74,6 +74,8 @@ std::atomic<uint32_t> loopStackMinimum{UINT32_MAX}, radioStackMinimum{UINT32_MAX
 RadioPauseControl radioPauseControl;
 RadioBleArbiter radioBleArbiter;
 RadioTimerRetryBudget radioTimerRetryBudget;
+RadioBoundaryDiagnostics timingDiagnostics;
+std::atomic<int> radioBoundaryErrorUs{0};
 int radioCommandMux = 0, progressMux = 0;
 uint64_t applicationLoopLastUs=1, radioTaskLastUs=1, radioTimerLastUs=1;
 uint32_t radioTimerTicks=0, radioTimerStartTick=0;

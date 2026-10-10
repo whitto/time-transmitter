@@ -4,23 +4,23 @@ Updated on **10 October 2026**, using the user's **Australia/Brisbane** timezone
 
 ## Read this first
 
-**Latest status:** V4.15 build R1 implements all nine additional findings from the V4.14 R2 senior review, explicitly authorized by the user. The Watch page also shows the last four successful or failed attempts per selected watch in fixed RAM only, and both uptime displays use hours/minutes/seconds. Source and release notes are published at tag `v4.15` (commit `ba3c30ac46cb975dcca909cd17cf7da2b4775d8d`). All 77 unittest cases across 23 groups and complete/additional browser checks passed afterward. Five direct source ZIPs match their tags byte-for-byte. The user requested no firmware compile, so the active ESP32 compile was stopped; no V4.15 board-build/ELF result is claimed. Read `docs/V4.15-review.md` for focused fault evidence and remaining physical limits. The nine items are marked implemented in `docs/NEXT_VERSION.md`; the original R2 report remains historical evidence.
+**Latest status:** V4.15 build R4 corrects the false timing warning reported after startup NTP synchronization: clock corrections, intentional pauses, RF-idle periods and fresh RF activation must not count as missed active-RF seconds or poison delay measurements. Current change notes are now at the top of the Arduino sketch. Focused checks/reliability review precede source publication; the full suite/browser checks run afterward. No ESP32 compile is requested. Read `docs/V4.15-R4-review.md` and release notes for final results. R1’s nine reliability fixes, four RAM-only watch outcomes and h/m/s uptime remain.
 
 Use active sketch `firmware/RadioClock_V4_15/RadioClock_V4_15.ino` and all three included libraries: NimBLE-Arduino 2.5.1-radioclock.1, RadioCrashDumpGate 1.0.0 and RadioBoundedWebServer 3.3.12-radioclock.1. Normal upgrades retain saved settings. Initial/reacquired NTP trust now needs three consistent replies spanning at least 30 seconds; RF/BT stay off while provisional. Legacy configuration upgrades to a versioned CRC record only on an actual settings/binding save, with no boot/idle migration write. Preserve the eight-item sidebar, RF packet timing and watch protocol/font/battery/LED/history behavior.
 
 Future workflow: fresh reliability review before publication; full changelog and source published first; full suite afterward; numbered revision if failures occur. No physical ESP32/watch is attached to the cloud. MeshCore messages are unrelated and must be ignored.
 
-Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.15-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
+Read `AGENTS.md`, the root `README.md`, `docs/NEXT_VERSION.md`, `docs/V4.15-R4-review.md`, `docs/V4.15-review.md` and `docs/LONG_RUN_RELIABILITY_REVIEW.md` before editing. Previous release reviews remain historical evidence. Preserve existing user changes, including README hardware/range details and the user's report that font changes now work.
 
 ## Repository and current release
 
 - Repository: <https://github.com/whitto/time-transmitter>.
 - Cloud checkout: `/workspace/time-transmitter`, branch `main`.
-- Source release: **V4.15 build R1**, tag `v4.15`; resolve its published commit with `git rev-parse v4.15^{commit}`. Historical tags remain unchanged.
+- Source release: **V4.15 build R4**, tag `v4.15-r4`; resolve its published commit with `git rev-parse v4.15-r4^{commit}`. Historical tags remain unchanged.
 - Previous V4.11 release commit: `9edbdc2462b76757cabba9ca689e62689c6e93b8`.
-- V4.15 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.15>.
-- V4.15 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15.zip>.
-- Arduino sketch and all three libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15.zip>.
+- V4.15 release: <https://github.com/whitto/time-transmitter/releases/tag/v4.15-r4>.
+- V4.15 source ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15-r4.zip>.
+- Arduino sketch and all three libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15-r4.zip>.
 - RadioCrashDumpGate library ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/crash-gate-v1.0.0.zip>.
 - Download this handoff: <https://raw.githubusercontent.com/whitto/time-transmitter/main/docs/SESSION_HANDOFF.md>.
 - Previous V4.10 release commit: **`40f309b0ddfac04095ac58d6c821d9df4b26e67f`**.

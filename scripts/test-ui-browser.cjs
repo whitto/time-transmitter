@@ -31,7 +31,7 @@ const { chromium } = require('playwright');
   let schedules = [{ station: 0, start: 0, end: 1440 }];
   const status = {
     time: '12:00:00', date: '2026-10-07', clock_state: 'Synchronized',
-    firmware_version: 'V4.15', firmware_build: 'R1', station: -1, radio_active: false,
+    firmware_version: 'V4.15', firmware_build: 'R4', station: -1, radio_active: false,
     bt_last_sync_status: 'Never synced', bt_last_sync_date: '2026-10-07 11:30:42',
     wifi_connected:true,ap_mode:false,wifi_ip:'10.0.1.137',
     bt_day_complete: true, bt_pairing: false,
@@ -168,7 +168,7 @@ const { chromium } = require('playwright');
       await route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(data) });
     });
     await page.goto('http://127.0.0.1:' + server.address().port);
-    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.15 R1');
+    await page.waitForFunction(() => document.querySelectorAll('#schedulesList .schedule').length === 1 && document.getElementById('fw').textContent === 'V4.15 R4');
     // Browser clicks return before asynchronous onchange/onclick work finishes.
     // Observe the real handler promises instead of assuming HTTP/render timing.
     await page.evaluate(() => {
@@ -696,7 +696,7 @@ const { chromium } = require('playwright');
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'phone layout remains within viewport');
     await page.screenshot({path:'/tmp/radioclock-v414-r2-overview-phone.png',fullPage:true});
     assert.deepEqual(await page.locator('.navbtn').allTextContents(), ['Overview', 'Radio', 'Watch (BLE)', 'Schedules', 'Network', 'Settings', 'Diagnostics', 'About']);
-    console.log('V4.15 R1 browser polling reliability passed: quiet Overview/hidden tabs, coalesced HTTP requests, latest config wins, fault-only explicitly confirmed storage recovery, unchanged eight-item sidebar and desktop/phone layout.');
+    console.log('V4.15 R4 browser polling reliability passed: quiet Overview/hidden tabs, coalesced HTTP requests, latest config wins, fault-only explicitly confirmed storage recovery, unchanged eight-item sidebar and desktop/phone layout.');
     assert.deepEqual(pageErrors, []);
     console.log('V4.15 browser regressions passed: crash toggle opt-in/only-own-setting/persistence/pending/stale-read/rollback/unsupported-core;  daily history autosave/persistence/rollback/pending and stale reads, overnight Wi-Fi group/drafts/power override, green/red RF/AP states in dark/light, phone/sidebar screenshots; existing: battery estimates/date/retained failures/profile switching/restart, font choices/opt-out/reload/storage failures, Bluetooth power preference/Always Wait, LED autosave/stale reads/rollback, default-on schedules, LF editor and existing sync/pair workflows, eight sidebar routes.');
   } finally {

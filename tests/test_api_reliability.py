@@ -22,7 +22,7 @@ FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
 
 EXTRAS = r'''
 #define FIRMWARE_VERSION "V4.15"
-#define FIRMWARE_BUILD "R1"
+#define FIRMWARE_BUILD "R4"
 constexpr int MAX_SCHEDULES=24, SN_DCF77=3, SN_MSF=4;
 constexpr int HTTP_GET=0;
 std::atomic<int> last_station{0};
@@ -243,7 +243,7 @@ std::puts("Actual API SSID UTF-8 byte limits preserve prior credentials PASS");}
         self.assertTrue(config['filesystem_available']);self.assertFalse(config['config_storage_fault'])
         self.assertEqual(config['ssid'],'\x02'*63)
         self.assertEqual(config['firmware_version'],'V4.15')
-        self.assertEqual(config['firmware_build'],'R1')
+        self.assertEqual(config['firmware_build'],'R4')
         self.assertEqual(config['bt_recent_sync_profile'],0)
         recent=config['bt_recent_syncs']
         self.assertEqual(len(recent),4)

@@ -1,4 +1,4 @@
-# Time Transmitter — RadioClock V4.15 build R1
+# Time Transmitter — RadioClock V4.15 build R4
 
 Time Transmitter is an ESP32 project for synchronizing "atomic" watches (Casio and Citizen tested) with a esp32 generating a local LF time signal.  Additionally I've added   Casio Bluetooth time delivery for some supported watches (tested on a Gshock Square GW-BX5600) this project combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin a pair of 330 ohm resistors (in parallel) to reduce the GPIO current (thats all I had) and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar)
@@ -151,11 +151,11 @@ The main page follows `ui/v32_ui_mockup.png`, using self-contained SVG icons and
 
 Before publishing, compare the rendered UI against the user's request and the approved mockup, then complete a fresh embedded reliability review. Check memory and allocation failures, task/callback lifetimes, deadlines and rollover, RF/BLE exclusion, network recovery, durable settings and flash-write frequency. Address regressions before publication. Ask before changing the fundamental layout or departing from that design. These requirements are recorded in `AGENTS.md`.
 
-[Download the V4.15 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15.zip).
+[Download the V4.15 R4 source ZIP](https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15-r4.zip).
 
-[Download only the Arduino source files](https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15.zip).
+[Download only the Arduino source files](https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15-r4.zip).
 
-[V4.15 release notes](https://github.com/whitto/time-transmitter/releases/tag/v4.15).
+[V4.15 R4 release notes](https://github.com/whitto/time-transmitter/releases/tag/v4.15-r4).
 
 [Download the session handoff Markdown](https://raw.githubusercontent.com/whitto/time-transmitter/main/docs/SESSION_HANDOFF.md).
 
@@ -170,6 +170,12 @@ bash scripts/compile.sh
 The checks run the actual UI script against mocked APIs, compile extracted firmware functions against host mocks, stress the real atomic RF/BLE arbiter concurrently, and verify gzip, DOM references, API routes, versions, and partition bounds. They exercise state transitions and failures; they do not emulate the ESP32 radio or prove the watch display changed. With Playwright and Chromium installed, run `node scripts/test-ui-browser.cjs` for the real-browser schedule, toggle and pairing regressions; set `RADIOCLOCK_CHROMIUM` if the browser executable is elsewhere.
 
 V4.14 R2 implements the user's approved long-run reliability changes: safe saves under low memory, no recurring failed-config retries, non-destructive filesystem recovery, the pinned NimBLE host-timer correction, bounded BT deadlines and allocation admission, nonblocking Wi-Fi/NTP recovery, trust-driven NTP wakes, ownership-safe RF pauses, checked timing startup/progress, rollover-safe uptime and conservative drift confidence. Common JSON responses use bounded storage and Diagnostics refreshes on demand. See [the R2 release review](docs/V4.14-R2-review.md) and [the updated reliability report](docs/LONG_RUN_RELIABILITY_REVIEW.md). V4.14 R1 introduced the optional crash-dump gate; its [original review](docs/V4.14-review.md) remains historical evidence. V4.13's approved LED/status/Wi-Fi behavior and compact daily snapshot remain; R2 also removes the previously queued recurring failed-config background writes. V4.11 serializes scan start/stop with the NimBLE host callbacks, disables the affected independent scan-response timer while retaining active scanning, and corrects the GW-BX5600 font packet length and transaction order. Its verification is recorded in `docs/V4.11-review.md`; physical watch/device acceptance is still required. V4.10 derives a stable setup SSID before AP-start events, checks AP readiness and retries failed starts without writing configuration. V4.9 fixes the V4.8 cold setup boot assertion by avoiding SNTP shutdown before its client/network startup. V4.8 introduced Wi-Fi/NTP recovery, Settings power controls and clearer watch delivery. See `docs/V4.12-review.md` for battery evidence, `docs/V4.11-review.md` for scan/font evidence and `docs/SESSION_HANDOFF.md` for current continuation instructions. `docs/V4.10-review.md` records the previous release checks. `docs/V4.5-review.md`, `docs/V4.2-review.md` and `docs/V3.5-review.md` record earlier changes and hardware acceptance steps. `baseline/`, `diff/`, `docs/CODEX_HANDOFF.md`, and `docs/RadioClock_Senior_Review.md` are historical handoff material. `ui/v321_ui_baseline.html` is the original UI, kept for comparison.
+
+## V4.15 R4 timing diagnostics correction
+
+R4 corrects false “Check timing” warnings caused by treating startup/NTP clock jumps or deliberate scheduler pauses as missed seconds. Boundary measurements now track continuous, stable-clock active RF work and use fixed RAM state; idle periods and fresh RF starts establish a baseline. The sketch includes current version/change notes at its top. RF generation, watch protocols, saved settings and the flash-write policy remain intact. Required libraries are unchanged from R1.
+
+Focused checks and the fresh [R4 reliability review](docs/V4.15-R4-review.md) precede publication. The full suite/browser checks run afterward; the ESP32 compile is omitted at the user’s request. See [R4 release notes](docs/V4.15-R4-release-notes.md) for final validation status.
 
 ## V4.15 features and reliability corrections
 
@@ -191,7 +197,9 @@ Clock acquisition, Wi-Fi power faults and timer retry budgets are available in D
 
 ## Build status
 
-V4.15 R1 is published and passed all **77 unittest cases across 23 groups**, the complete browser suite and additional Watch history/uptime checks. The fresh embedded reliability review and focused fault tests passed before publication; the full checks ran afterward, as requested. All five source ZIP downloads match their tags byte-for-byte, including the Arduino sketch and all three libraries. **The ESP32 compile was stopped at the user’s request; no board-build/ELF result is claimed.** See [the release review](docs/V4.15-review.md), [complete release notes](docs/V4.15-release-notes.md) and [retained evidence](docs/build-evidence/v4.15). Physical ESP32/watch soak and fault acceptance remain necessary; no physical device is attached to the cloud.
+V4.15 R4 completes focused validation/review before publication and runs full host/browser checks afterward. The ESP32 compile is omitted at the user’s request; final results are recorded in the R4 release notes.
+
+Historical V4.15 R1 is published and passed all **77 unittest cases across 23 groups**, the complete browser suite and additional Watch history/uptime checks. The fresh embedded reliability review and focused fault tests passed before publication; the full checks ran afterward, as requested. All five source ZIP downloads match their tags byte-for-byte, including the Arduino sketch and all three libraries. **The ESP32 compile was stopped at the user’s request; no board-build/ELF result is claimed.** See [the release review](docs/V4.15-review.md), [complete release notes](docs/V4.15-release-notes.md) and [retained evidence](docs/build-evidence/v4.15). Physical ESP32/watch soak and fault acceptance remain necessary; no physical device is attached to the cloud.
 
 ## Credits and provenance
 

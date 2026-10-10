@@ -56,7 +56,7 @@ const state = {
 };
 const status = {
   time: '12:00:00', date: '2026-10-06', clock_state: 'Synchronized',
-  firmware_version: 'V4.15', firmware_build: 'R1', radio_active: false, station: -1,
+  firmware_version: 'V4.15', firmware_build: 'R4', radio_active: false, station: -1,
   bt_last_sync_date: '2026-10-06 22:15:42',
   bt_time: '2026-10-06 22:00:00',
   bt_last_sync_status: 'Never synced', bt_day_complete: false,
@@ -158,7 +158,7 @@ assert.equal(element('wifiKeepOn').checked, false);
 assert.equal(element('wifiScheduled').classList.contains('active'), true);
 assert.equal(element('btTime').textContent, 'BT watch time: 2026-10-06 22:00:00');
 assert.equal(element('btTimezone').value, 'Australia/Brisbane');
-assert.equal(element('fw').textContent, 'V4.15 R1');
+assert.equal(element('fw').textContent, 'V4.15 R4');
 assert.equal(element('activityLedEnabled').checked, true, 'legacy config without an LED preference must default to enabled');
 assert.equal(element('activityLedStatus').textContent, 'BT sync indicator');
 assert.equal(element('heroWatch').textContent, 'Delivered · 2026-10-06 22:15:42', 'saved delivery timestamp must survive legacy reboot status');
@@ -655,7 +655,7 @@ assert.match(element('toast').textContent,/Reconnect to the RadioStation/);
 
 evaluate('schedules=Array.from({length:24},()=>({station:0,start:0,end:60}))');
 await evaluate('addSchedule()');assert.equal(evaluate('schedules.length'),24,'UI schedule count is bounded');
-console.log('V4.15 R1 polling reliability checks passed: page/visibility gating, bounded/coalesced requests, timeout recovery, invalid JSON, out-of-order config, saved settings protection and explicit fault-only storage recovery.');
+console.log('V4.15 R4 polling reliability checks passed: page/visibility gating, bounded/coalesced requests, timeout recovery, invalid JSON, out-of-order config, saved settings protection and explicit fault-only storage recovery.');
 
 assert.equal(evaluate("formatUptime(450249)"),"125h 04m 09s");
 assert.equal(evaluate("formatUptime(0)"),"0h 00m 00s");

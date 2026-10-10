@@ -2,7 +2,11 @@
 
 ## Required for the next and every future release
 
-- [ ] Update the changelog at the top of the active Arduino `.ino` sketch with the latest version/build, release date, features, fixes and dependency/installation changes. Keep newest notes first, preserve prior notes/original credits and check consistency with GitHub release notes before publication. Requested 10 October 2026 (Brisbane).
+- [x] V4.15 R4: Update the changelog at the top of the active Arduino `.ino` sketch with the latest version/build, release date, features, fixes and dependency/installation changes. Keep newest notes first, preserve prior notes/original credits and check consistency with GitHub release notes before publication. Requested 10 October 2026 (Brisbane).
+
+## V4.15 R4 — timing diagnostics correction
+
+- [x] Correct the false timing counter caused by initial NTP setting, later clock corrections and deliberate scheduler pauses. Measure genuine continuous active-RF boundary misses/delays with bounded RAM-only state; retain actual RF timing/encoding, BLE protocols, settings and flash-write policy. Focused review/checks precede source publication, with full tests afterward. No ESP32 compile requested.
 
 ## V4.15 — nine further reliability corrections
 

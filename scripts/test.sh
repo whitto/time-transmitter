@@ -27,6 +27,7 @@ python3 tests/test_watch_options.py
 python3 tests/test_watch_battery.py
 python3 tests/test_rf_handoff.py
 python3 tests/test_radio_reliability.py
+python3 tests/test_timing_diagnostics.py
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread tests/test_radio_arbiter.cpp -o "$test_dir/radio-arbiter"

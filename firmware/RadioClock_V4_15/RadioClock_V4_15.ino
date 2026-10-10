@@ -1,5 +1,30 @@
 //
 // RadioClock_V4_15.ino
+//
+// Release changelog (newest first):
+// V4.15 R4 - 10 October 2026 (Australia/Brisbane)
+//   - Fix false "Check timing" warnings after the initial NTP clock jump.
+//   - Timing diagnostics exclude clock corrections, intentional pauses and RF-idle periods.
+//   - Retain genuine stable-clock RF boundary misses/delays with bounded RAM-only tracking.
+//   - Restore current version/change notes here at the top of the Arduino sketch.
+//   - Existing LF timing/encoding, BLE packets, schedules and flash-write policy are retained.
+//   - Libraries unchanged: NimBLE-Arduino 2.5.1-radioclock.1, RadioCrashDumpGate 1.0.0,
+//     RadioBoundedWebServer 3.3.12-radioclock.1; ArduinoJson 6.21.5; ESP32 core 3.3.12.
+//   - Source-only release. Full tests follow publication; no ESP32 compile requested.
+// V4.15 R1 - 10 October 2026 (Australia/Brisbane)
+//   - Latest four successful/failed BT attempts per watch in fixed RAM; uptime in h/m/s.
+//   - Three-reply NTP acquisition/reacquisition and short-interval drift recovery.
+//   - Bounded BLE shutdown and final TIME confidence checks; qualified timer retry replenishment.
+//   - Strict versioned/CRC saved settings, checked Wi-Fi shutdown and 32-byte UTF-8 SSIDs.
+//   - New required RadioBoundedWebServer library limits request/response size and duration.
+// V4.14 R2 - earlier reliability release
+//   - Checked config/schedule saves, no repeated failed-save writes and preserved storage.
+//   - Patched NimBLE host-timer shutdown; safe callback lifetimes and bounded BLE work.
+//   - Nonblocking router/NTP recovery, clock-trust wakes and conservative holdover.
+//   - RF pause ownership, timer/task progress recovery, bounded JSON and 64-bit uptime.
+// V4.14 R1 - earlier crash-storage release
+//   - Saved default-Off crash-dump toggle with required RadioCrashDumpGate library.
+// Earlier version notes and original author credits are retained below.
 // Based on RadioClock_JJY40_HWTimer_Validated_V2.7; Casio time-only BLE protocol selection.
 // Retains V2.7 RF timing, encoding, timezone, LittleFS, Wi-Fi power and flash-wear improvements.
 // Scheduled watch-initiated BLE: GW-BX5600 MIP, Standard digital/hybrid, and experimental analogue time-only.
@@ -140,7 +165,7 @@ bool webServerStarted=false;
 // Configuration Constants
 #define DEVICENAME_PREFIX "RadioStation"     // Device name prefix for WiFi AP mode
 #define FIRMWARE_VERSION "V4.15"
-#define FIRMWARE_BUILD "R1"
+#define FIRMWARE_BUILD "R4"
 
 #define DEFAULT_TZ_NAME "Asia/Tokyo"
 #define CONFIG_FILE "/config.json"           // WiFi and timezone configuration file
@@ -655,6 +680,9 @@ void radioProcessPauseCommand(void) {
 // (measures the drift on every successful sync) and configureAdaptiveNtp()
 // (sets the interval before SNTP schedules its next request).
 portMUX_TYPE clockMux = portMUX_INITIALIZER_UNLOCKED;
+// Diagnostic-only sequence: odd while a wall-clock commit is in progress.
+// radioTask samples it without taking clockMux or changing RF clock behavior.
+std::atomic<uint32_t> radioClockStepGeneration{0};
 uint64_t ntpLastMonoUs = 0;         // esp_timer (monotonic) time at the previous sync, microseconds
 int64_t ntpLastEpochUs = 0;         // Wall-clock (epoch) time at the previous sync, microseconds
 double ntpDriftPpm = 0.0;           // Smoothed clock drift estimate, parts-per-million
@@ -1276,6 +1304,7 @@ void setup(void)
 // Envelope phase still derives from real time, never from notification counts.
 void radioTask(void *pvParameters)
 {
+  RadioBoundaryDiagnostics timingDiagnostics;
   int64_t lastBoundary = -1;
   int lastMinute = -1;
   int lastSecond = -1;
@@ -1304,6 +1333,7 @@ void radioTask(void *pvParameters)
     if (radioFaultLatched || !istimerstarted || !radioTimerQualified || !radioSafetyMonitorReady) {
       emergencyRfOff();
       radioBleArbiter.releaseRf();
+      if (timingDiagnostics.suspend()) radioBoundaryErrorUs = 0;
       lastBoundary = -1; lastMinute = lastSecond = lastSlot = -1;
       continue;
     }
@@ -1314,11 +1344,16 @@ void radioTask(void *pvParameters)
       digitalWrite(PIN_BUZZ, LOW);
       buzzout = 0;
       ampmod = 0;
+      if (timingDiagnostics.suspend()) radioBoundaryErrorUs = 0;
       continue;
     }
     // Derive the frame phase from the wall-clock on every wake; do not
     // assume the timer was started exactly on a second boundary.
+    const uint32_t clockGeneration = radioClockStepGeneration.load();
+    const uint64_t diagnosticMonoUs = (uint64_t)esp_timer_get_time();
     struct timeval tv; gettimeofday(&tv, nullptr);
+    const bool diagnosticClockStable =
+        clockGeneration == radioClockStepGeneration.load();
     int second = (int)(tv.tv_sec % 60);
     int slot = (int)(tv.tv_usec / 100000);
     if (slot > 9) slot = 9;
@@ -1327,15 +1362,6 @@ void radioTask(void *pvParameters)
     bool frameRefreshed = false;
     bool refreshRequested = encodingRefreshRequested.exchange(false);
     if (boundaryChanged || refreshRequested) {
-      if (lastBoundary >= 0 && boundary > lastBoundary + 1)
-        radioMissedBoundaries += (uint32_t)(boundary - lastBoundary - 1);
-      if (lastBoundary != boundary) {
-        // Diagnostic: callback arrival delay within this second; not a
-        // calibrated RF edge measurement, but useful for detecting overload.
-        radioBoundaryErrorUs = (int)tv.tv_usec;
-        if ((uint32_t)tv.tv_usec > radioBoundaryWorstUs) radioBoundaryWorstUs = tv.tv_usec;
-        ++radioProcessedSecond;
-      }
       lastBoundary = boundary;
       getlocaltime();
       applyCurrentSchedule();
@@ -1363,6 +1389,21 @@ void radioTask(void *pvParameters)
     if (ampmod && buzzsw) buzzout = !buzzout;
     else buzzout = 0;
     digitalWrite(PIN_BUZZ, buzzout ? HIGH : LOW);
+    // Diagnose the sampled task arrival after completing this wake's RF work;
+    // this is not a calibrated RF-edge measurement. Baseline while RF is
+    // inactive, including BLE handoff and newly activated schedules.
+    const bool diagnosticRfActive = radioBleArbiter.rfOwned() && carrierReady &&
+        last_station >= 0 && last_station < NUM_STATIONS && !radioPaused &&
+        !radioFaultLatched;
+    if (timingDiagnostics.observe(boundary, (uint32_t)tv.tv_usec,
+            diagnosticMonoUs, diagnosticRfActive, clockGeneration,
+            diagnosticClockStable)) {
+      const RadioBoundaryDiagnostics::Snapshot &sample = timingDiagnostics.snapshot();
+      radioBoundaryErrorUs = (int)sample.delayUs;
+      radioBoundaryWorstUs = sample.worstUs;
+      radioMissedBoundaries = sample.missedBoundaries;
+      radioProcessedSecond = sample.processedSeconds;
+    }
   }
 }
 
@@ -2653,7 +2694,10 @@ extern "C" void sntp_sync_time(struct timeval *tv)
     sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
     return;
   }
-  if (settimeofday(tv, nullptr) != 0) {
+  radioClockStepGeneration.fetch_add(1);
+  const int commitResult = settimeofday(tv, nullptr);
+  radioClockStepGeneration.fetch_add(1); // Complete the bracket on failure too.
+  if (commitResult != 0) {
     rejectNtpReply(true);
     sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
     return;
@@ -2809,7 +2853,9 @@ setlocaltime(void)
   struct timeval tv = {
     .tv_sec = nowtime
   };
+  radioClockStepGeneration.fetch_add(1);
   settimeofday(&tv, NULL);
+  radioClockStepGeneration.fetch_add(1);
   getlocaltime(); // to make wday/yday
 }
 
@@ -6809,7 +6855,7 @@ static const uint8_t INDEX_HTML_GZ[] PROGMEM = {
   0x2b, 0xb4, 0x09, 0xc2, 0x1b, 0x43, 0x5e, 0xb1, 0x89, 0x2a, 0x27, 0x4f, 0x31, 0x29, 0xe9, 0x3c, 0x0e, 0x66, 0xe3, 0xd2,
   0x23, 0x21, 0x23, 0x1c, 0x71, 0x88, 0x00, 0xbc, 0xf0, 0x92, 0x1a, 0x3e, 0x79, 0x3a, 0x6f, 0x9e, 0xbc, 0xc7, 0x8f, 0xcf,
   0x91, 0xa1, 0x80, 0x60, 0xd4, 0x84, 0xe6, 0xd1, 0xa0, 0x48, 0xa8, 0x9a, 0x5d, 0x95, 0x4e, 0xfe, 0xd0, 0xa9, 0xc3, 0xea,
-  0x79, 0xdf, 0x84, 0xaa, 0xf8, 0x5e, 0x54, 0xa6, 0x7f, 0x75, 0x80, 0xb3, 0xa0, 0x30, 0x84, 0x11, 0x7d, 0x11, 0xd8, 0xc6,
+  0x79, 0xdf, 0x81, 0xaa, 0xf8, 0x5e, 0x54, 0xa6, 0x7f, 0x75, 0x80, 0xb3, 0xa0, 0x30, 0x84, 0x11, 0x7d, 0x11, 0xd8, 0xc6,
   0x02, 0xd4, 0x9b, 0x17, 0x11, 0x2c, 0x19, 0x5e, 0xca, 0x87, 0xdf, 0x08, 0x07, 0x7c, 0xe7, 0xa5, 0xf8, 0x07, 0x14, 0x16,
   0x4b, 0xb2, 0xca, 0x39, 0x3e, 0x9d, 0x3c, 0xe7, 0x4d, 0xae, 0x2e, 0xfe, 0xf1, 0xf7, 0xff, 0x5b, 0x54, 0xf2, 0xa8, 0x10,
   0x97, 0x0d, 0x7f, 0x26, 0x3c, 0xbe, 0x01, 0x01, 0x51, 0xf6, 0xa0, 0x4a, 0x8d, 0x25, 0x8e, 0x03, 0x14, 0xd9, 0x12, 0x90,
@@ -7800,7 +7846,7 @@ static const uint8_t INDEX_HTML_GZ[] PROGMEM = {
   0x23, 0x76, 0x8b, 0x1b, 0x98, 0x59, 0x78, 0x09, 0xde, 0x40, 0xbe, 0x16, 0x71, 0x54, 0xf8, 0x53, 0xd1, 0x54, 0x69, 0x2f,
   0xe5, 0x2f, 0x8a, 0xe2, 0xf2, 0x00, 0x0f, 0xac, 0x89, 0x82, 0xec, 0x1e, 0xe3, 0x54, 0x58, 0x56, 0xb0, 0xdd, 0x1d, 0xd9,
   0xab, 0x1c, 0xac, 0x4d, 0x89, 0xf0, 0x1a, 0x75, 0xc7, 0x4f, 0x50, 0x1f, 0x49, 0x76, 0xf2, 0x71, 0xdc, 0xe4, 0xdb, 0x6a,
-  0xb3, 0x3b, 0x83, 0xa7, 0x65, 0x5d, 0x1c, 0xf1, 0xf7, 0x6e, 0xb7, 0x5e, 0x9d, 0x9d, 0xfc, 0x05, 0x84, 0x16, 0x38, 0xac,
+  0xb3, 0x3b, 0x83, 0xa7, 0x65, 0x5d, 0x1c, 0xf1, 0xf7, 0x6e, 0xb7, 0x5e, 0x9d, 0x9d, 0xfc, 0x05, 0x7b, 0xcc, 0x69, 0x31,
   0x56, 0xa9, 0x01, 0x00,
 };
 

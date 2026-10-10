@@ -126,3 +126,75 @@ private:
   uint8_t attempts_ = 0;
   bool trackingHealth_ = false;
 };
+
+// radioTask alone owns this bounded diagnostic state. Wall time still drives
+// the RF frame/envelope; these observations never alter RF phase or scheduling.
+// Only uninterrupted active RF with a stable wall/monotonic relationship can
+// contribute missed seconds or task-arrival delay. Clock commits, activation,
+// deliberate pauses and idle/BLE periods begin a fresh diagnostic baseline.
+class RadioBoundaryDiagnostics {
+public:
+  struct Snapshot {
+    uint32_t delayUs = 0;
+    uint32_t worstUs = 0;
+    uint32_t missedBoundaries = 0;
+    uint32_t processedSeconds = 0;
+  };
+
+  bool suspend() {
+    tracking_ = false;
+    const bool changed = snapshot_.delayUs != 0;
+    snapshot_.delayUs = 0;
+    return changed;
+  }
+
+  bool observe(int64_t wallSecond, uint32_t wallUsec, uint64_t monoUs,
+               bool rfActive, uint32_t clockGeneration,
+               bool sampleStable = true) {
+    if (!rfActive || !sampleStable || (clockGeneration & 1U) ||
+        wallSecond < 0 || wallSecond > (INT64_MAX - 999999LL) / 1000000LL ||
+        wallUsec >= 1000000U) return suspend();
+    const int64_t wallUs = wallSecond * 1000000LL + wallUsec;
+    bool continuous = tracking_ && clockGeneration == lastClockGeneration_ &&
+        monoUs >= lastMonoUs_ && wallUs >= lastWallUs_;
+    if (continuous) {
+      const uint64_t monoElapsed = monoUs - lastMonoUs_;
+      const uint64_t wallElapsed = static_cast<uint64_t>(wallUs - lastWallUs_);
+      const uint64_t difference = monoElapsed > wallElapsed
+          ? monoElapsed - wallElapsed : wallElapsed - monoElapsed;
+      // Allow adjacent clock-read jitter and conservative oscillator drift;
+      // accepted NTP commits are excluded separately, even for tiny steps.
+      continuous = difference <= 2000ULL + monoElapsed / 1000ULL;
+    }
+    const int64_t previousSecond = lastWallUs_ / 1000000LL;
+    lastWallUs_ = wallUs;
+    lastMonoUs_ = monoUs;
+    lastClockGeneration_ = clockGeneration;
+    tracking_ = true;
+    if (!continuous) {
+      const bool changed = snapshot_.delayUs != 0;
+      snapshot_.delayUs = 0;
+      return changed;
+    }
+    if (wallSecond == previousSecond) return false;
+    snapshot_.delayUs = wallUsec;
+    if (wallUsec > snapshot_.worstUs) snapshot_.worstUs = wallUsec;
+    const uint64_t skipped = static_cast<uint64_t>(wallSecond - previousSecond - 1);
+    snapshot_.missedBoundaries = saturatedAdd(snapshot_.missedBoundaries, skipped);
+    snapshot_.processedSeconds = saturatedAdd(snapshot_.processedSeconds, 1);
+    return true;
+  }
+
+  const Snapshot &snapshot() const { return snapshot_; }
+
+private:
+  static uint32_t saturatedAdd(uint32_t value, uint64_t increment) {
+    return increment >= static_cast<uint64_t>(UINT32_MAX - value)
+        ? UINT32_MAX : value + static_cast<uint32_t>(increment);
+  }
+  Snapshot snapshot_;
+  int64_t lastWallUs_ = 0;
+  uint64_t lastMonoUs_ = 0;
+  uint32_t lastClockGeneration_ = 0;
+  bool tracking_ = false;
+};

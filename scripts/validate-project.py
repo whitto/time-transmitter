@@ -13,7 +13,7 @@ source = (sketch / f"{sketch.name}.ino").read_text()
 html = (root / "ui/radioclock.html").read_text()
 assert f"// {sketch.name}.ino" in source
 assert '#define FIRMWARE_VERSION "V4.15"' in source
-assert '#define FIRMWARE_BUILD "R1"' in source
+assert '#define FIRMWARE_BUILD "R4"' in source
 assert '// Firmware Version: V4.15' in source
 assert "V4.15" in html and "V3.2.2" not in html
 assert 'id="btTime"' in html and 'id="btTimezone"' in html and 'id="btTimeOffset"' in html
