@@ -1,6 +1,6 @@
-# RadioClock V4.15 build R4 — Arduino source
+# RadioClock V4.16 build R1 — Arduino source
 
-Open `RadioClock_V4_15.ino` in Arduino IDE **2.3.4**. Keep this complete **15-file folder** together: the sketch, twelve headers, `partitions.csv` and this README. The headers are `RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h`, `CasioWatchBattery.h`, `BtSyncLed.h`, `BtSyncHistory.h`, `BtRecentSyncs.h`, `RadioWifiAccessWindow.h`, `RadioConfigWriter.h`, `RadioJsonWriter.h` and `RadioReliability.h`. The UI is embedded; no separate UI upload is needed.
+Open `RadioClock_V4_16.ino` in Arduino IDE **2.3.4**. Keep this complete **15-file folder** together: the sketch, twelve headers, `partitions.csv` and this README. The headers are `RadioBleArbiter.h`, `RadioBleScanControl.h`, `CasioBxProtocol.h`, `CasioWatchSettings.h`, `CasioWatchBattery.h`, `BtSyncLed.h`, `BtSyncHistory.h`, `BtRecentSyncs.h`, `RadioWifiAccessWindow.h`, `RadioConfigWriter.h`, `RadioJsonWriter.h` and `RadioReliability.h`. The UI is embedded; no separate UI upload is needed.
 
 Install **esp32 by Espressif Systems 3.3.12** and **ArduinoJson 6.21.5**. For a classic 4 MB Node32 / Node32s, choose **Node32s**, **40 MHz** flash and **No OTA (Large APP)**. ESP32 Dev Module with **4MB / Huge APP** is also supported. The supplied partition table defines the project's 3 MB application layout; the default small partition is insufficient. Routine uploads do not require erasing all flash.
 
@@ -13,7 +13,9 @@ Install all three included source libraries into your Arduino sketchbook's `libr
 
 The full repository stores these under `libraries/`. The Arduino-only ZIP places all three library folders beside the sketch. Cloud compile scripts install and verify all three automatically. These packages contain source, not compiled binaries.
 
-V4.15 R4 fixes false timing warnings from NTP clock jumps, intentional pauses and RF-idle periods. Missed-boundary and delay measurements cover continuous stable-clock active RF; counters stay in RAM. Current release/change notes are at the top of the sketch. Existing RF/BLE behavior and required libraries are unchanged. Full tests follow publication; no ESP32 compile is requested for R4.
+V4.16 fixes two automatic-BT schedule edge cases: invalid/unpaired slots no longer consume the daily occurrence or interrupt valid Always Wait listening, and successful BT timezone/offset saves rearm automatic windows with a recalculated deadline. Failed BT time-setting saves restore previous BT fields and retain automatic schedule state. Current version/change notes are at the top of the sketch. Dependencies and installation are unchanged.
+
+Earlier V4.15 R4 fixes false timing warnings from NTP clock jumps, intentional pauses and RF-idle periods. Missed-boundary and delay measurements cover continuous stable-clock active RF; counters stay in RAM. Current release/change notes are at the top of the sketch. Existing RF/BLE behavior and required libraries are unchanged. The previous R4 review/results remain available in the full repository.
 
 V4.15 retains the prior approved long-run reliability corrections: bounded and verified configuration/schedule saves, no recurring failed-save retries, preserved storage on mount failure, automatic router recovery, nonblocking network startup, NTP wakeups before clock-trust deadlines, bounded Bluetooth transactions, safe callback teardown, RF command ownership and timing-progress safeguards. Uptime uses the 64-bit monotonic clock; drift confidence uses conservative absolute measurements. Diagnostics exposes RAM-only faults, progress and stack headroom; its full refresh runs only when needed.
 
@@ -35,10 +37,10 @@ The saved GPIO2 LED control remains: flash during actual BT sync only, solid for
 
 GW-BX5600 optional font changes precede final TIME, with packet length/unrelated settings preserved and readback. Experimental battery estimates are read before the handshake, shown per watch with date/time, and kept in RAM; battery-only errors do not prevent TIME. Other protocols have no validated battery calibration. RF keeps priority over BLE. JJY and BT settings/timezones remain independent.
 
-Focused checks and the required pre-publication reliability review are recorded in the full repository’s `docs/V4.15-R4-review.md`. Source is published before the full suite, with results added to release notes afterward as requested. Physical Node32s/watch acceptance and a long soak remain required; cloud checks cannot guarantee years of uninterrupted service.
+The fresh V4.16 source-only reliability review is recorded in the full repository’s `docs/V4.16-review.md`. **No additional tests, browser checks or compilation were performed for V4.16, as requested.** Earlier-version results are not corrected-version validation. Physical scheduled-sync acceptance remains pending, including the reported 12:30/18:30 Brisbane misses. The ESP listening schedule does not enable or program automatic adjustment on the watch.
 
 With no saved credentials, connect to **RadioStation_XXXXXX**, password **12345678**, and open **http://192.168.4.1**.
 
 Project and credits: <https://github.com/whitto/time-transmitter>. Original RadioClock notices credit **tarohs/nisejjy** (2021) and **5Breeze/ClockWaveXmitter** (2025); they remain in the sketch. Casio packet/font/battery references include **izivkov/gshock-smart-sync-webapp** and **izivkov/gshock_api**. NimBLE source retains its authors' licenses and notices.
 
-Full ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.15-r4.zip>. Arduino source and all three libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.15-r4.zip>.
+Full ZIP: <https://github.com/whitto/time-transmitter/archive/refs/tags/v4.16.zip>. Arduino source and all three libraries: <https://github.com/whitto/time-transmitter/archive/refs/tags/arduino-v4.16.zip>.
