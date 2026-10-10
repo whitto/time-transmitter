@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fault/recovery checks using the actual V4.15 network policy functions."""
+"""Fault/recovery checks using the actual V4.16 network policy functions."""
 import shutil
 import subprocess
 import tempfile

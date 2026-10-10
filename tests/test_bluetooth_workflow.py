@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_16/RadioClock_V4_16.ino'
 
 
 def balanced_block(source, start):
@@ -827,7 +827,7 @@ class BluetoothWorkflowTest(unittest.TestCase):
                  'bluetoothScanMayStart', 'serviceBtShutdownProgress', 'completeBtShutdownProgress',
                  'initBluetoothSync', 'shutdownBluetoothForRadio', 'resetBluetoothDayIfNeeded',
                  'bluetoothControllerNeeded', 'shutdownIdleBluetooth',
-                 'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'startBluetoothWindow',
+                 'btMinutesOfDay', 'btMinuteInBluetoothWindow', 'btSlotOccurrenceDate', 'bluetoothTimeSlotConflicts', 'bluetoothProfileBindingReady', 'startBluetoothWindow',
                  'stopBluetoothWindow', 'resetBluetoothSlotAttempt', 'commitBluetoothBattery', 'attemptBluetoothSync', 'serviceBluetoothSync',
                  'bluetoothSettingsMutable', 'bluetoothSlotSettingsMutable', 'bluetoothStateText', 'sendBoundedJson', 'btWeekday', 'btNthSunday',
                  'btLastSunday', 'btDayOfYear', 'btDstAtUtc', 'btBaseOffsetSeconds', 'bluetoothLocalTime',
@@ -847,9 +847,12 @@ class BluetoothWorkflowTest(unittest.TestCase):
         history_branch = balanced_block(source, source.index('if (server.hasArg("bt_history_persist"))'))
         crash_branch = balanced_block(source, source.index('if (server.hasArg("crash_dump_enabled"))'))
         wifi_branch = balanced_block(source, source.index('if (server.hasArg("wifi_access_enabled") ||'))
+        bt_time_stage_start = source.index('// Stage both BT civil-time fields')
+        bt_time_stage_end = source.index('// Check both credential fields', bt_time_stage_start)
+        bt_time_stage = source[bt_time_stage_start:bt_time_stage_end]
         routes = ('void registerRoutes() {\n' + routes +
-                  '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + protocol_branch + '\n});' +
-                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + crash_branch + history_branch + wifi_branch + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
+                  '\nserver.on("/test/protocol", HTTP_POST, []() {\n' + bt_time_stage + protocol_branch + '\n});' +
+                  '\nserver.on("/api/config", HTTP_POST, []() {\n' + bt_time_stage + crash_branch + history_branch + wifi_branch + font_branch + power_branch + led_branch + protocol_branch + profile_branch + slot_branch + '\n});\n}')
         # Forward declaration precedes initBluetoothSync, which creates this callback class.
         functions = functions.replace('void initBluetoothSync(void) {', scan + '\n\nvoid initBluetoothSync(void) {', 1)
         return '\n'.join([MOCKS, source[globals_start:globals_end], HELPERS, functions, routes, DRIVER])

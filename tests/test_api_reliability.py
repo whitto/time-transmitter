@@ -18,11 +18,11 @@ except ImportError:
     import test_bluetooth_workflow as workflow
 
 ROOT = Path(__file__).resolve().parents[1]
-FIRMWARE = ROOT / 'firmware/RadioClock_V4_15/RadioClock_V4_15.ino'
+FIRMWARE = ROOT / 'firmware/RadioClock_V4_16/RadioClock_V4_16.ino'
 
 EXTRAS = r'''
-#define FIRMWARE_VERSION "V4.15"
-#define FIRMWARE_BUILD "R4"
+#define FIRMWARE_VERSION "V4.16"
+#define FIRMWARE_BUILD "R1"
 constexpr int MAX_SCHEDULES=24, SN_DCF77=3, SN_MSF=4;
 constexpr int HTTP_GET=0;
 std::atomic<int> last_station{0};
@@ -242,8 +242,8 @@ std::puts("Actual API SSID UTF-8 byte limits preserve prior credentials PASS");}
         self.assertFalse(config['crash_dump_enabled']);self.assertTrue(config['crash_dump_available'])
         self.assertTrue(config['filesystem_available']);self.assertFalse(config['config_storage_fault'])
         self.assertEqual(config['ssid'],'\x02'*63)
-        self.assertEqual(config['firmware_version'],'V4.15')
-        self.assertEqual(config['firmware_build'],'R4')
+        self.assertEqual(config['firmware_version'],'V4.16')
+        self.assertEqual(config['firmware_build'],'R1')
         self.assertEqual(config['bt_recent_sync_profile'],0)
         recent=config['bt_recent_syncs']
         self.assertEqual(len(recent),4)

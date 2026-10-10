@@ -139,7 +139,7 @@ int main() {
   server.post("/api/settings", {{"bt_always_wait", "false"}});
   assert(server.code == 500 && btAlwaysWaitEnabled);
   server.post("/api/config", {{"bt_time_offset_minutes", "120"}});
-  assert(server.code == 500 && btTimeOffsetMinutes == 120 && server.response.indexOf("not saved") >= 0);
+  assert(server.code == 500 && btTimeOffsetMinutes == 30 && server.response.indexOf("not saved") >= 0);
   assert(flash.at(CONFIG_FILE) == uiSavedConfig);
   mockRenameOk = true; loadConfig(); assert(btTimeOffsetMinutes == 30);
   std::puts("Real RF-save preserves Bluetooth settings; every daily slot listens, durable edits/rollback and reboot retention passed");

@@ -252,7 +252,7 @@ std::puts("Actual response writer: absolute partial-send deadline and rollover P
 
     def test_unique_dependency_manifest(self):
         subprocess.run(['python3',str(ROOT/'scripts/validate-bounded-webserver-source.py')],check=True)
-        firmware=(ROOT/'firmware/RadioClock_V4_15/RadioClock_V4_15.ino').read_text()
+        firmware=(ROOT/'firmware/RadioClock_V4_16/RadioClock_V4_16.ino').read_text()
         self.assertIn('#include <RadioBoundedWebServer.h>',firmware)
         self.assertNotIn('#include <WebServer.h>',firmware)
         spec=importlib.util.spec_from_file_location('bounded_source_validator',ROOT/'scripts/validate-bounded-webserver-source.py')

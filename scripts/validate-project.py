@@ -8,14 +8,14 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-sketch = root / "firmware/RadioClock_V4_15"
+sketch = root / "firmware/RadioClock_V4_16"
 source = (sketch / f"{sketch.name}.ino").read_text()
 html = (root / "ui/radioclock.html").read_text()
 assert f"// {sketch.name}.ino" in source
-assert '#define FIRMWARE_VERSION "V4.15"' in source
-assert '#define FIRMWARE_BUILD "R4"' in source
-assert '// Firmware Version: V4.15' in source
-assert "V4.15" in html and "V3.2.2" not in html
+assert '#define FIRMWARE_VERSION "V4.16"' in source
+assert '#define FIRMWARE_BUILD "R1"' in source
+assert '// Firmware Version: V4.16' in source
+assert "V4.16" in html and "V3.2.2" not in html
 assert 'id="btTime"' in html and 'id="btTimezone"' in html and 'id="btTimeOffset"' in html
 for required in ('bt_timezone', 'bt_time_offset_minutes', 'bluetoothLocalTime'):
     assert required in source, f"Bluetooth time setting missing: {required}"
@@ -66,4 +66,4 @@ assert 'RADIO_HTTP_BOUNDS_VERSION' in source, "Reject an unguarded server build"
 assert 'NIMBLE_RADIOCLOCK_RELIABILITY_PATCH' in source, "Use the reviewed NimBLE source"
 assert 'extern "C" void sntp_sync_time' in source, "Gate invalid NTP corrections before committing time"
 print(f"PASS: gzip round-trip ({len(compressed):,} bytes), JavaScript syntax, "
-      f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.15 versions, 4 MB partitions")
+      f"{len(elements.ids)} DOM IDs, {len(ui_routes)} UI routes, V4.16 versions, 4 MB partitions")

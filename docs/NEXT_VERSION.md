@@ -4,6 +4,13 @@
 
 - [x] V4.15 R4: Update the changelog at the top of the active Arduino `.ino` sketch with the latest version/build, release date, features, fixes and dependency/installation changes. Keep newest notes first, preserve prior notes/original credits and check consistency with GitHub release notes before publication. Requested 10 October 2026 (Brisbane).
 
+## V4.16 — Bluetooth listening schedule fixes
+
+- [x] Record an automatic daily occurrence only after a valid bound profile/protocol and accepted civil-time window; invalid slots must not interrupt valid Always Wait listening.
+- [x] Rearm all automatic occurrence/deferred markers after a successful effective BT timezone/offset save and recompute any active automatic deadline through the normal service loop. Checked failed saves restore previous BT fields and retain automatic schedule state.
+- [x] Update the active sketch/UI/build and fixture paths to V4.16 R1, publish full changelog/source ZIPs, and complete a fresh source-only reliability review. The user explicitly requested no additional testing or compilation for this release; no corrected-version test pass is claimed.
+- [ ] Retest actual BX5600 automatic connections at 12:30/18:30 Brisbane, capturing `BT SCHED:` / `BT:` lines from target−5 through target+6 minutes. Verify watch auto-adjustment, assigned slot binding/protocol and RF/memory status; the original device failure is not yet attributed.
+
 ## V4.15 R4 — timing diagnostics correction
 
 - [x] Correct the false timing counter caused by initial NTP setting, later clock corrections and deliberate scheduler pauses. Measure genuine continuous active-RF boundary misses/delays with bounded RAM-only state; retain actual RF timing/encoding, BLE protocols, settings and flash-write policy. Focused review/checks passed before source publication, followed by all 87 unittest cases and complete browser checks. Both source ZIPs verified; no further revision needed. No ESP32 compile requested.
