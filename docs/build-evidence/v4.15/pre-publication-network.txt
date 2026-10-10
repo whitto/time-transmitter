@@ -1,8 +1,0 @@
-.........Real Wi-Fi/SNTP cold boot, checked AP startup/MAC naming/retries, recovery, fresh callbacks and power-save grace passed
-.Adaptive independent NTP wakes, bounded failures/recovery, AP retention and 64-bit rollover policy passed
-.Actual Wi-Fi power decisions preserve AP/association, boot/recovery grace, NTP wakes and daily access
-.
-----------------------------------------------------------------------
-Ran 12 tests in 5.150s
-
-OK
