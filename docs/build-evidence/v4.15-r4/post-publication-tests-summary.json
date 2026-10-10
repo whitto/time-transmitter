@@ -1,0 +1,157 @@
+{
+  "source_commit": "7fb958c3363906a8b94b1e868e2e417d26638e0e",
+  "script": "scripts/test.sh",
+  "status": "All checks passed; transcript reaches both final native success markers.",
+  "python_group_count": 24,
+  "python_case_count": 87,
+  "groups": [
+    {
+      "file": "tests/test_ble_lifecycle.py",
+      "cases": 2,
+      "duration": "3.482s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_nimble_pin.py",
+      "cases": 4,
+      "duration": "1.059s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_ble_scan_control.py",
+      "cases": 9,
+      "duration": "9.125s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_clock_and_encoders.py",
+      "cases": 9,
+      "duration": "0.988s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_wifi_ntp_recovery.py",
+      "cases": 1,
+      "duration": "1.245s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_network_reliability.py",
+      "cases": 1,
+      "duration": "1.971s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_wifi_access_schedule.py",
+      "cases": 4,
+      "duration": "4.471s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_bluetooth_workflow.py",
+      "cases": 2,
+      "duration": "3.825s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_bt_history.py",
+      "cases": 2,
+      "duration": "3.172s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_bt_recent_syncs.py",
+      "cases": 2,
+      "duration": "5.223s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_recent_sync_ui.py",
+      "cases": 3,
+      "duration": "0.150s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_crash_dump_gate.py",
+      "cases": 4,
+      "duration": "1.490s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_crash_dump_config.py",
+      "cases": 1,
+      "duration": "2.149s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_schedule_persistence.py",
+      "cases": 1,
+      "duration": "3.923s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_storage_reliability.py",
+      "cases": 7,
+      "duration": "8.772s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_activity_led.py",
+      "cases": 3,
+      "duration": "2.085s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_json_writer.py",
+      "cases": 1,
+      "duration": "0.461s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_api_reliability.py",
+      "cases": 2,
+      "duration": "13.365s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_http_bounds.py",
+      "cases": 4,
+      "duration": "3.364s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_watch_options.py",
+      "cases": 3,
+      "duration": "4.589s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_watch_battery.py",
+      "cases": 6,
+      "duration": "4.725s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_rf_handoff.py",
+      "cases": 1,
+      "duration": "0.173s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_radio_reliability.py",
+      "cases": 5,
+      "duration": "4.979s",
+      "status": "OK"
+    },
+    {
+      "file": "tests/test_timing_diagnostics.py",
+      "cases": 10,
+      "duration": "0.850s",
+      "status": "OK"
+    }
+  ],
+  "native_stress": "Concurrent stress: 10000 RF sessions, 9815 BLE sessions; no modeled overlap",
+  "native_bx": "Casio BX protocol capture and malformed-packet checks passed",
+  "project_ui_vm_checks": "PASS",
+  "esp32_compile": "Omitted at user request"
+}

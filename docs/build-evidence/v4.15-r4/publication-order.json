@@ -1,0 +1,15 @@
+{
+  "firmware_source_commit": "7fb958c3363906a8b94b1e868e2e417d26638e0e",
+  "source_tag": "v4.15-r4",
+  "github_release_published_at_utc": "2026-10-10T00:09:23Z",
+  "pre_publication": "Independent embedded reliability review,24 focused cases,source scope and rendered UI checks passed.",
+  "post_publication": {
+    "unittest_cases": 87,
+    "unittest_groups": 24,
+    "full_suite": "All checks passed; full transcript retained.",
+    "full_browser": "Complete regression checks passed.",
+    "direct_source_zips_verified": 2
+  },
+  "esp32_compile": "Omitted at user request.",
+  "firmware_changes_after_publication": false
+}

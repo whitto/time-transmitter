@@ -6,7 +6,7 @@
 
 ## V4.15 R4 — timing diagnostics correction
 
-- [x] Correct the false timing counter caused by initial NTP setting, later clock corrections and deliberate scheduler pauses. Measure genuine continuous active-RF boundary misses/delays with bounded RAM-only state; retain actual RF timing/encoding, BLE protocols, settings and flash-write policy. Focused review/checks precede source publication, with full tests afterward. No ESP32 compile requested.
+- [x] Correct the false timing counter caused by initial NTP setting, later clock corrections and deliberate scheduler pauses. Measure genuine continuous active-RF boundary misses/delays with bounded RAM-only state; retain actual RF timing/encoding, BLE protocols, settings and flash-write policy. Focused review/checks passed before source publication, followed by all 87 unittest cases and complete browser checks. Both source ZIPs verified; no further revision needed. No ESP32 compile requested.
 
 ## V4.15 — nine further reliability corrections
 

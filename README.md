@@ -175,7 +175,7 @@ V4.14 R2 implements the user's approved long-run reliability changes: safe saves
 
 R4 corrects false “Check timing” warnings caused by treating startup/NTP clock jumps or deliberate scheduler pauses as missed seconds. Boundary measurements now track continuous, stable-clock active RF work and use fixed RAM state; idle periods and fresh RF starts establish a baseline. The sketch includes current version/change notes at its top. RF generation, watch protocols, saved settings and the flash-write policy remain intact. Required libraries are unchanged from R1.
 
-Focused checks and the fresh [R4 reliability review](docs/V4.15-R4-review.md) precede publication. The full suite/browser checks run afterward; the ESP32 compile is omitted at the user’s request. See [R4 release notes](docs/V4.15-R4-release-notes.md) for final validation status.
+Focused checks and the fresh [R4 reliability review](docs/V4.15-R4-review.md) passed before publication. The complete 87-case host suite and browser checks passed afterward; both source ZIP downloads match their tags. The ESP32 compile is omitted at the user’s request. See [R4 release notes](docs/V4.15-R4-release-notes.md) for complete validation details.
 
 ## V4.15 features and reliability corrections
 
@@ -197,7 +197,7 @@ Clock acquisition, Wi-Fi power faults and timer retry budgets are available in D
 
 ## Build status
 
-V4.15 R4 completes focused validation/review before publication and runs full host/browser checks afterward. The ESP32 compile is omitted at the user’s request; final results are recorded in the R4 release notes.
+V4.15 R4 is published and passed all **87 unittest cases across 24 groups**, the complete browser suite and both source ZIP verifications. Focused checks and the fresh reliability review passed before publication; the full checks followed afterward. No firmware changed after publication. **ESP32 compilation is omitted at the user’s request.** See [R4 release notes](docs/V4.15-R4-release-notes.md) and [review/evidence](docs/V4.15-R4-review.md).
 
 Historical V4.15 R1 is published and passed all **77 unittest cases across 23 groups**, the complete browser suite and additional Watch history/uptime checks. The fresh embedded reliability review and focused fault tests passed before publication; the full checks ran afterward, as requested. All five source ZIP downloads match their tags byte-for-byte, including the Arduino sketch and all three libraries. **The ESP32 compile was stopped at the user’s request; no board-build/ELF result is claimed.** See [the release review](docs/V4.15-review.md), [complete release notes](docs/V4.15-release-notes.md) and [retained evidence](docs/build-evidence/v4.15). Physical ESP32/watch soak and fault acceptance remain necessary; no physical device is attached to the cloud.
 
