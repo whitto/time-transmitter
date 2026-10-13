@@ -8,7 +8,9 @@ Recorded 14 October 2026 (Australia/Brisbane). Device: Time Transmitter **V4.15 
 2. The last reported successful BT delivery was **2026-10-13 18:30:38** in BT civil time. The user enabled Wi-Fi and BT power saving after that success.
 3. Subsequent scheduled synchronization did not succeed. Manual Sync Now and Always Wait also failed.
 4. Turning only BT power saving Off did not restore manual synchronization. Turning Wi-Fi to Always on as well did not restore it without a reboot. The user reported no other active watch client.
-5. A reboot with both power-saving options Off restored synchronization. The user is keeping both Off as the current working baseline. This confirms recovery after restart; it does not identify which transition or retained state failed.
+5. A reboot with both power-saving options Off restored synchronization. This established the working baseline; it does not identify which transition or retained state failed.
+6. From that working state, the user enabled **BT power saving alone**, with Wi-Fi Always on and Always Wait Off, waited for the idle period and successfully completed Sync Now plus the watch's manual sync. One isolated BT shutdown/restart works on the device. It does not establish long-run or combined-transition reliability.
+7. Wi-Fi power saving alone after an actual driver off/on cycle remains to be tested. The saved 07:00–10:00 Brisbane access window keeps Wi-Fi on during that interval; testing only inside it would exercise modem sleep rather than the entire off/on path.
 
 During a failed manual attempt, raw Diagnostics reported:
 
@@ -38,7 +40,7 @@ The vendor scanner also suppresses an advertisement before application callbacks
 
 ## Next evidence and change limits
 
-The underlying fault remains open. Isolate Wi-Fi-only and BT-only transitions from a clean baseline when device testing is available. A successful reboot is recovery evidence, not proof that power saving is repaired.
+The underlying fault remains open. The isolated BT-only manual restart succeeded. Test Wi-Fi-only off/on, then combined/repeated transitions as needed, from a clean working baseline when device testing is available. A successful reboot or single restart is recovery/acceptance evidence for that case, not proof that power saving is repaired.
 
 If more firmware instrumentation is needed, use bounded RAM counters/snapshots for controller initialization generation, scan starts/completions and completion reason, advertisements/Casio candidates/filter rejections, and vendor/client handle/connected/application-quiescent state. Retain scanner error evidence across window expiry. A fixed latest-candidate address/type snapshot can distinguish filtering from missing advertisements; it must not bypass pairing identity.
 
