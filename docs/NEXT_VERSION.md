@@ -11,6 +11,15 @@
 - [x] Update the active sketch/UI/build and fixture paths to V4.16 R1, publish full changelog/source ZIPs, and complete a fresh source-only reliability review. The user explicitly requested no additional testing or compilation for this release; no corrected-version test pass is claimed.
 - [ ] Retest actual BX5600 automatic connections at 12:30/18:30 Brisbane, capturing `BT SCHED:` / `BT:` lines from target−5 through target+6 minutes. Verify watch auto-adjustment, assigned slot binding/protocol and RF/memory status; the original device failure is not yet attributed.
 
+## Open investigation — Bluetooth stops after power-save transitions
+
+Reported 14 October 2026 on **V4.15 R4**. Scheduled BT and LF worked before enabling Wi-Fi and BT power saving. Later manual and Always Wait syncs failed too. Disabling both options without reboot did not restore sync; rebooting with both Off restored it. The user is keeping both Off as the working baseline. This is a workaround, not a confirmed firmware fix. See [observations and source review](BT_POWER_SAVE_INVESTIGATION.md).
+
+- [ ] Identify the failing transition/runtime state before changing BLE lifetime, pairing filters, memory admission or Wi-Fi/NTP behavior. During failure the physical controller was On, SDK scanning was active, clock/memory were healthy and RF was idle; the connection-attempt counter did not advance. No underlying restart defect has been reproduced in cloud tests.
+- [ ] Correct the confirmed reporting defect: preserve scanner-start failure evidence instead of overwriting it with an unexplained "no watch connection" at window expiry; distinguish an opened window from actual scanning.
+- [ ] Add bounded RAM-only restart/scan/advertisement and retained-client diagnostics if device reproduction is required. Keep logs out of flash, preserve the pairing identity guard and existing packet/timing behavior, and complete the normal reliability review/release workflow before publishing firmware.
+- [ ] From a clean working baseline, isolate Wi-Fi-only and BT-only power-save transitions on the physical board. Do not claim a fix from a mocked cycle or from a reboot alone.
+
 ## V4.15 R4 — timing diagnostics correction
 
 - [x] Correct the false timing counter caused by initial NTP setting, later clock corrections and deliberate scheduler pauses. Measure genuine continuous active-RF boundary misses/delays with bounded RAM-only state; retain actual RF timing/encoding, BLE protocols, settings and flash-write policy. Focused review/checks passed before source publication, followed by all 87 unittest cases and complete browser checks. Both source ZIPs verified; no further revision needed. No ESP32 compile requested.
