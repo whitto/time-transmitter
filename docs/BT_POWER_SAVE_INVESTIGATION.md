@@ -10,7 +10,9 @@ Recorded 14 October 2026 (Australia/Brisbane). Device: Time Transmitter **V4.15 
 4. Turning only BT power saving Off did not restore manual synchronization. Turning Wi-Fi to Always on as well did not restore it without a reboot. The user reported no other active watch client.
 5. A reboot with both power-saving options Off restored synchronization. This established the working baseline; it does not identify which transition or retained state failed.
 6. From that working state, the user enabled **BT power saving alone**, with Wi-Fi Always on and Always Wait Off, waited for the idle period and successfully completed Sync Now plus the watch's manual sync. One isolated BT shutdown/restart works on the device. It does not establish long-run or combined-transition reliability.
-7. Wi-Fi power saving alone after an actual driver off/on cycle remains to be tested. The saved 07:00–10:00 Brisbane access window keeps Wi-Fi on during that interval; testing only inside it would exercise modem sleep rather than the entire off/on path.
+7. With **Wi-Fi power saving On**, **BT power saving Off** and **Always Wait Off**, the scheduled **12:30 Brisbane** sync succeeded on 14 October. Raw Diagnostics records delivery at **12:30:39**. The saved 07:00–10:00 access window was no longer active. No trace explicitly showing the earlier driver Off transition was supplied, so this confirms the scheduled configuration worked without establishing every Wi-Fi transition.
+
+The [successful scheduled-sync snapshot](build-evidence/power-save-investigation/scheduled-sync-2026-10-14-1230.json) records V4.15 R4, uptime 3h 45m 43s, successful TIME delivery, four accumulated connection attempts/16 acknowledged writes/16 notifications/zero response errors, no RF/Wi-Fi/storage faults, free heap 78,784 bytes and largest block 69,620 bytes. Clock confidence was Synchronized with an NTP age of 339 seconds and estimated error of 0.327 seconds. The earlier 08:46:24 saved BT snapshot is consistent with the first-success-per-day quota; the latest 12:30:39 result is in RAM.
 
 During a failed manual attempt, raw Diagnostics reported:
 
@@ -40,7 +42,7 @@ The vendor scanner also suppresses an advertisement before application callbacks
 
 ## Next evidence and change limits
 
-The underlying fault remains open. The isolated BT-only manual restart succeeded. Test Wi-Fi-only off/on, then combined/repeated transitions as needed, from a clean working baseline when device testing is available. A successful reboot or single restart is recovery/acceptance evidence for that case, not proof that power saving is repaired.
+The underlying fault remains open. The isolated BT-only manual restart and scheduled synchronization with Wi-Fi power saving alone succeeded. Combined/repeated transitions remain untested after the clean restart; a single successful case does not rule out a cumulative failure. Keeping Wi-Fi power saving On and BT power saving Off is now a demonstrated scheduled configuration, rather than disabling both. Observe further slots or isolate the combination when device testing is available; retain actual Off/On evidence if attributing the fault to a particular driver transition.
 
 If more firmware instrumentation is needed, use bounded RAM counters/snapshots for controller initialization generation, scan starts/completions and completion reason, advertisements/Casio candidates/filter rejections, and vendor/client handle/connected/application-quiescent state. Retain scanner error evidence across window expiry. A fixed latest-candidate address/type snapshot can distinguish filtering from missing advertisements; it must not bypass pairing identity.
 

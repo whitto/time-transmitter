@@ -13,13 +13,14 @@
 
 ## Open investigation — Bluetooth stops after power-save transitions
 
-Reported 14 October 2026 on **V4.15 R4**. Scheduled BT and LF worked before enabling Wi-Fi and BT power saving. Later manual and Always Wait syncs failed too. Disabling both options without reboot did not restore sync; rebooting with both Off restored it. From that working state, a manual sync after enabling BT power saving alone succeeded with Wi-Fi Always on and Always Wait Off. Wi-Fi-only and combined/repeated transitions remain unisolated. This is investigation evidence, not a confirmed firmware fix. See [observations and source review](BT_POWER_SAVE_INVESTIGATION.md).
+Reported 14 October 2026 on **V4.15 R4**. Scheduled BT and LF worked before enabling Wi-Fi and BT power saving. Later manual and Always Wait syncs failed too. Disabling both options without reboot did not restore sync; rebooting with both Off restored it. From that working state, a manual sync with BT power saving alone succeeded, then the 12:30 Brisbane scheduled sync succeeded with Wi-Fi power saving On, BT power saving Off and Always Wait Off (delivery 12:30:39). Combined/repeated transitions remain unisolated. This is investigation evidence, not a confirmed firmware fix. See [observations and source review](BT_POWER_SAVE_INVESTIGATION.md).
 
 - [ ] Identify the failing transition/runtime state before changing BLE lifetime, pairing filters, memory admission or Wi-Fi/NTP behavior. During failure the physical controller was On, SDK scanning was active, clock/memory were healthy and RF was idle; the connection-attempt counter did not advance. No underlying restart defect has been reproduced in cloud tests.
 - [ ] Correct the confirmed reporting defect: preserve scanner-start failure evidence instead of overwriting it with an unexplained "no watch connection" at window expiry; distinguish an opened window from actual scanning.
 - [ ] Add bounded RAM-only restart/scan/advertisement and retained-client diagnostics if device reproduction is required. Keep logs out of flash, preserve the pairing identity guard and existing packet/timing behavior, and complete the normal reliability review/release workflow before publishing firmware.
 - [x] From a clean working baseline, test one BT-only idle shutdown/manual restart on the physical board: successful with Wi-Fi Always on and Always Wait Off. Do not extend this result to repeated/combined cycles.
-- [ ] Isolate Wi-Fi-only power-save off/on, then combined/repeated transitions as needed. Account for the saved Wi-Fi access window, and do not claim a fix from a mocked cycle, reboot or single restart alone.
+- [x] Verify a scheduled sync with Wi-Fi power saving On and BT power saving Off after the morning access window: successful at 12:30:39 Brisbane, 14 October, with no reported BLE/RF/Wi-Fi errors. Snapshot retained; actual preceding Off/On transitions were not captured.
+- [ ] Isolate combined/repeated power-save transitions as needed and retain actual driver Off/On evidence. Do not claim a fix or rule out cumulative failure from a mocked cycle, reboot or single successful test alone.
 
 ## V4.15 R4 — timing diagnostics correction
 
