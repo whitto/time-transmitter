@@ -1,5 +1,11 @@
 # Time Transmitter — RadioClock V4.16 build R1
 
+> **Known unresolved bug: sleep / power saving.** Bluetooth synchronization has stopped working after enabling Wi-Fi and Bluetooth power saving. The cause is still under investigation and no fix has been confirmed.
+>
+> **For reliable operation, disable both Wi-Fi and Bluetooth power saving:** turn **Settings → Power down idle Bluetooth** **Off**. Disable the **Daily Wi-Fi access** window, then select **Network → Wi-Fi power → Always on**. Enabling or saving an enabled daily Wi-Fi access window selects Power-save again.
+>
+> If synchronization has already stopped, reboot the ESP32 after disabling both power-saving options; changing the settings alone did not restore synchronization in the reported failure. See the [investigation and current findings](docs/BT_POWER_SAVE_INVESTIGATION.md).
+
 Time Transmitter is an ESP32 project for synchronizing "atomic" watches (Casio and Citizen tested) with a esp32 generating a local LF time signal.  Additionally I've added   Casio Bluetooth time delivery for some supported watches (tested on a Gshock Square GW-BX5600) this project combines an NTP-disciplined clock, configurable transmission schedules, a browser settings/dashboard UI, and hardware-timed carrier generation.
 The transmitter uses a simple GPIO pin a pair of 330 ohm resistors (in parallel) to reduce the GPIO current (thats all I had) and a coil of about 150 turns of copper magnet wire around a 10mm ferrite rod of about 120mm length (from Jaycar)
 
@@ -133,7 +139,7 @@ In **Watch (BLE)**, select the GW-BX5600 profile, enable **Apply watch font duri
 
 During each **GW-BX5600** Bluetooth sync, V4.12 requests the watch’s battery condition before the required time handshake. It shows a battery **estimate in 10% steps** for the selected watch profile, plus the last reading date/time in the Bluetooth timezone and offset. A missing or malformed reply does not prevent a time attempt. The 1.5-second battery reply deadline preserves the existing 5-second SP/font reply deadlines. Readings stay in RAM and clear on reboot; a replacement watch cannot inherit the old watch’s reading. Other watch protocols show unavailable because their calibration has not been validated. This feature adds no flash writes. See [the battery protocol and validation](docs/V4.12-review.md).
 
-In **Settings**, **Power down idle Bluetooth** turns the Bluetooth controller off outside scheduled listening windows and wakes for explicit Pair Watch/Sync Now requests. **Always Wait** takes priority; turn it off to obtain controller savings. For additional savings use the existing Wi-Fi power-save mode and disable the blue LED. This option preserves the CPU clock/RF scheduler and does not enable deep or full-chip light sleep. See [the power-saving assessment](docs/V4.6-power-saving.md).
+In **Settings**, **Power down idle Bluetooth** turns the Bluetooth controller off outside scheduled listening windows and wakes for explicit Pair Watch/Sync Now requests. **Always Wait** takes priority over this option. **Leave Power down idle Bluetooth Off and Wi-Fi Always on for reliable operation while the sleep/power-saving bug remains unresolved.** This option preserves the CPU clock/RF scheduler and does not enable deep or full-chip light sleep. See [the power-saving assessment](docs/V4.6-power-saving.md) for the original feature description and the [current investigation](docs/BT_POWER_SAVE_INVESTIGATION.md) for the unresolved failure.
 
 **Disable Wi-Fi sleep / Keep Wi-Fi always on** uses the existing Wi-Fi power-mode enum: enabled is Always on (`0`); disabled is Scheduled/power-save (`1`). It also applies the corresponding Wi-Fi driver sleep setting. There is no independent persistent sleep flag.
 
